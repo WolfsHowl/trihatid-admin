@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Rate Ride</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .rating-card {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 88%;
+      max-width: 400px;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 12px;
+      box-sizing: border-box;
+      background-color: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+      z-index: 1000;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .big-avatar {
+      width: 75px;
+      height: 75px;
+      border-radius: 50%;
+      background-color: #eee;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: bold;
+      color: #555;
+      overflow: hidden;
+    }
+    .stars-row {
+      display: flex;
+      gap: 8px;
+      margin: 8px 0;
+    }
+    .star {
+      font-size: 28px;
+      color: #ccc;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .feedback-input {
+      width: 100%;
+      height: 70px;
+      padding: 10px;
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      background-color: #f8f9fa;
+      font-size: 12px;
+      outline: none;
+      resize: none;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map" style="width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1;"></div>
+
+  <div class="rating-card">
+    <h2 class="welcome-title" style="font-size: 20px; margin: 0;">Rate your ride</h2>
+    
+    <div class="big-avatar">D</div>
+    
+    <div>
+      <span class="driver-name" style="font-size: 15px; display:block; font-weight: 700; color: #1d1d1f;">Loading driver...</span>
+      <span id="driver-sub" style="font-size: 11px; color: #666; display:block; margin-top: 2px;"></span>
+    </div>
+
+    <div class="stars-row">
+      <span class="star" data-value="1">★</span>
+      <span class="star" data-value="2">★</span>
+      <span class="star" data-value="3">★</span>
+      <span class="star" data-value="4">★</span>
+      <span class="star" data-value="5">★</span>
+    </div>
+
+    <div class="star-label" id="star-label">Tap a star to rate</div>
+    <div class="tag-row" id="tag-row"></div>
+    <p style="font-size: 12px; font-weight: 700; color: #214329; align-self: flex-start; margin: 0;">Feedback:</p>
+
+    <textarea class="feedback-input" name="feedback" id="feedback" placeholder="Write an optional comment..."></textarea>
+
+    <button type="button" class="button1" id="submit-rating-btn" style="width:100%; text-align: center; text-decoration: none; margin-top: 4px; display: block; box-sizing: border-box; border:none; cursor:pointer;">
+      Submit
+    </button>
+
+    <button onclick="window.location.href='report.html' + (new URLSearchParams(window.location.search).get('ride_id') ? '?ride_id=' + encodeURIComponent(new URLSearchParams(window.location.search).get('ride_id')) : '')" style="background:none; border:none; color:#c62828; font-weight:700; cursor:pointer; margin-top:10px;">
+      Report an Issue with Driver
+    </button>
+  </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="notify.js"></script>
+<script src="driver-info.js"></script>
+<script>
+  let map;
+  let currentRating = 0; 
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    map = L.map('map', { zoomControl: false, attributionControl: false }).setView([11.59, 122.37], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const rideId = urlParams.get('ride_id');
+
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return;
+
+    let rideData = null;
+
+    if (rideId) {
+      const { data } = await _supabase
+        .from('rides')
+        .select('*')
+        .eq('id', rideId)
+        .maybeSingle();
+      rideData = data;
+    }
+
+    if (!rideData) {
+      const { data } = await _supabase
+        .from('rides')
+        .select('*')
+        .eq('passenger_id', user.id)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      rideData = data;
+    }
+
+    if (!rideData) {
+      document.querySelector('.driver-name').textContent = 'Tricycle Driver';
+      return;
+    }
+
+    const activeRideId = rideData.id;
+
+    if (rideData.driver_id) {
+      const { data: profileData } = await _supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', rideData.driver_id)
+        .maybeSingle();
+
+      const driverName = profileData?.fullname || profileData?.full_name || rideData.driver_name || 'Tricycle Driver';
+      document.querySelector('.driver-name').textContent = driverName;
+      
+      const info = await TriDriver.getDetails(rideData.driver_id, rideData);
+      const bits = [];
+      if (info.plate) bits.push('Plate ' + info.plate.toUpperCase());
+      if (info.body) bits.push('Body #' + info.body);
+      if (info.rating.count) bits.push('\u2605 ' + info.rating.avg.toFixed(1));
+      document.getElementById('driver-sub').textContent = bits.join(' \u2022 ');
+      const driverAvatar = profileData?.avatar_url || profileData?.avatar || profileData?.photo_url || profileData?.profile_pic || rideData.driver_avatar_url || null;
+      
+      const avatarEl = document.querySelector('.big-avatar');
+      if (avatarEl && driverAvatar) {
+        avatarEl.innerHTML = `<img src="${driverAvatar}" alt="Driver" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+      } else if (avatarEl) {
+        avatarEl.textContent = driverName.charAt(0).toUpperCase();
+      }
+    }
+
+    const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
+    const TAGS_GOOD = ['Safe driving', 'Polite', 'On time', 'Clean tricycle', 'Knows the route', 'Fair fare'];
+    const TAGS_BAD = ['Unsafe driving', 'Rude', 'Late', 'Dirty tricycle', 'Took a long route', 'Overcharged'];
+    const selectedTags = new Set();
+
+    function renderTags() {
+      const list = currentRating <= 2 ? TAGS_BAD : TAGS_GOOD;
+      selectedTags.clear();
+      const row = document.getElementById('tag-row');
+      row.innerHTML = '';
+      list.forEach(tag => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'tag-chip';
+        b.textContent = tag;
+        b.addEventListener('click', () => {
+          if (selectedTags.has(tag)) { selectedTags.delete(tag); b.classList.remove('on'); }
+          else { selectedTags.add(tag); b.classList.add('on'); }
+        });
+        row.appendChild(b);
+      });
+    }
+
+    const stars = document.querySelectorAll('.star');
+    let tagSet = null; // 'bad' | 'good' — which tag list is showing
+    stars.forEach((star, index) => {
+      star.addEventListener('click', () => {
+        currentRating = index + 1;
+        stars.forEach((s, i) => {
+          s.style.color = i < currentRating ? '#f1c40f' : '#ccc';
+        });
+        document.getElementById('star-label').textContent = LABELS[currentRating];
+        const wanted = currentRating <= 2 ? 'bad' : 'good';
+        if (tagSet !== wanted) { tagSet = wanted; renderTags(); }
+      });
+    });
+
+    document.getElementById('submit-rating-btn').addEventListener('click', async function(e) {
+      e.preventDefault();
+      if (currentRating === 0) {
+        alert("Please tap a star rating before submitting.");
+        return;
+      }
+
+      const feedbackText = document.getElementById('feedback').value;
+
+      if (activeRideId) {
+        const { error: rateError } = await TriUtil.writeWithFallback(
+          r => _supabase.from('rides').update(r).eq('id', activeRideId),
+          { rating: currentRating, feedback: feedbackText, rating_tags: Array.from(selectedTags).join(', ') },
+          ['rating_tags']
+        );
+        if (rateError) {
+          alert("Could not save your rating: " + rateError.message);
+          return;
+        }
+      }
+
+      TriNotify.toast('Thank you!', 'Your rating helps keep rides safe.');
+      const from = new URLSearchParams(window.location.search).get('from');
+      const back = (from === 'feedback' || from === 'history') ? `home.html?view=${from}` : 'home.html';
+      setTimeout(() => { window.location.href = back; }, 700);
+    });
+  });
+</script>
+</body>
+</html>

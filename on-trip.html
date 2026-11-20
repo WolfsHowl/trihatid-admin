@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - On Trip</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .trip-card {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 88%;
+      max-width: 400px;
+      background-color: #ffffff;
+      padding: 18px 16px;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 78vh;
+      overflow-y: auto;
+    }
+    .status-badge {
+      background-color: #214329;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      align-self: center;
+    }
+    .fare-box {
+      text-align: center;
+      margin: 8px 0;
+    }
+    .fare-amount {
+      font-size: 28px;
+      font-weight: 800;
+      color: #214329;
+    }
+    .driver-profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-top: 1px solid #eee;
+      padding-top: 12px;
+      cursor: pointer;
+    }
+    .driver-avatar {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      background-color: #ccc;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: #555;
+    }
+    .driver-info {
+      flex: 1;
+      text-align: left;
+    }
+    .driver-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1d1d1f;
+    }
+    .action-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .live-box {
+      background: #f3f8f4; border: 1px solid #d5e6d9; border-radius: 12px;
+      padding: 10px 12px; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .live-box .live-main { font-size: 13px; font-weight: 700; color: #214329; }
+    .live-box .live-sub { font-size: 11px; color: #666; margin-top: 2px; }
+    .locate-btn {
+      background: #214329; color: #fff; border: none; border-radius: 10px;
+      padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    }
+    .btn-secondary-action {
+      flex: 1;
+      padding: 10px;
+      background-color: #f0f0f0;
+      color: #333;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map" style="width: 100vw; height: 100vh; position: absolute; top: 0; left: 0;"></div>
+
+  <div class="trip-card">
+    <div class="status-badge">Enjoy your ride!</div>
+    
+    <div class="live-box">
+      <div>
+        <div class="live-main" id="live-main">Locating your driver...</div>
+        <div class="live-sub" id="live-sub">Waiting for the driver's location</div>
+      </div>
+      <button type="button" class="locate-btn" id="locate-driver-btn">Locate driver</button>
+    </div>
+
+    <div class="fare-box">
+      <p style="font-size: 11px; color: #666;">Amount to pay</p>
+      <span class="fare-amount">₱ 40.00</span>
+    </div>
+
+    <div id="driver-details" class="drv-details" style="border-top: 1px solid #eee; padding-top: 12px;">
+      <span style="font-size: 12px; color: #666;">Loading driver details...</span>
+    </div>
+    <a href="#" id="driver-profile-link" class="fine-print" style="color:#214329; font-weight:700; text-decoration:none; text-align:center; display:none;">View full driver profile &rsaquo;</a>
+
+    <div class="action-row">
+      <a href="#" id="chat-btn" class="btn-secondary-action">Chat</a>
+    </div>
+
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script src="notify.js"></script>
+  <script src="driver-info.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async function () {
+      const map = L.map('map', { zoomControl: false }).setView([11.5833, 122.4833], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 200);
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const rideId = urlParams.get('ride_id');
+
+      if (!rideId) {
+        alert("No active ride specified.");
+        window.location.href = "home.html";
+        return;
+      }
+
+      const chatBtn = document.getElementById('chat-btn');
+      if (chatBtn && rideId) {
+        const currentUrl = encodeURIComponent(window.location.pathname + window.location.search);
+        chatBtn.href = `messages.html?ride_id=${rideId}&return=${currentUrl}`;
+      }
+
+      const { data: rideData, error: rideError } = await _supabase
+        .from('rides')
+        .select('*')
+        .eq('id', rideId)
+        .single();
+
+      if (rideError || !rideData) {
+        console.log("No active ride found:", rideError);
+        return;
+      }
+
+      if (rideData.pickup_lat && rideData.pickup_lng) {
+        map.setView([rideData.pickup_lat, rideData.pickup_lng], 15);
+      }
+
+      // ---------- Live driver tracking ----------
+      const dot = (color) => L.divIcon({
+        className: 'custom-pin',
+        html: `<div style="background-color:${color};width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 8px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [24, 24], iconAnchor: [12, 12]
+      });
+      const hasDest = rideData.destination_lat && rideData.destination_lng;
+      if (hasDest) {
+        L.marker([rideData.destination_lat, rideData.destination_lng], { icon: dot('#c62828') })
+          .addTo(map).bindPopup(`<b>Destination:</b> ${TriUtil.esc(rideData.destination || '')}`);
+      }
+
+      let driverMarker = null, routeLine = null, followDriver = true;
+      let lastRouteAt = 0, lastRoutePos = null, hasFix = false;
+      const liveMain = document.getElementById('live-main');
+      const liveSub = document.getElementById('live-sub');
+
+      // Stop auto-following once the passenger pans the map; "Locate driver" turns it back on.
+      map.on('dragstart', () => { followDriver = false; });
+      document.getElementById('locate-driver-btn').addEventListener('click', () => {
+        followDriver = true;
+        if (driverMarker) {
+          map.setView(driverMarker.getLatLng(), Math.max(map.getZoom(), 16), { animate: true });
+          driverMarker.openPopup();
+        } else {
+          liveSub.textContent = "Still waiting for the driver's location...";
+        }
+      });
+
+      const ago = (iso) => {
+        if (!iso) return '';
+        const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+        if (s < 10) return 'just now';
+        if (s < 60) return `${s}s ago`;
+        return `${Math.round(s / 60)} min ago`;
+      };
+
+      async function drawRoute(lat, lng) {
+        if (!hasDest) return;
+        const now = Date.now();
+        // Re-route at most every 10 s and only if the driver actually moved
+        if (now - lastRouteAt < 10000) return;
+        if (lastRoutePos && TriUtil.distanceMeters(lat, lng, lastRoutePos[0], lastRoutePos[1]) < 20) return;
+        lastRouteAt = now; lastRoutePos = [lat, lng];
+        try {
+          const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${lng},${lat};${rideData.destination_lng},${rideData.destination_lat}?overview=full&geometries=geojson`);
+          const j = await r.json();
+          if (j.routes && j.routes.length) {
+            const coords = j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+            if (routeLine) routeLine.setLatLngs(coords);
+            else routeLine = L.polyline(coords, { color: '#214329', weight: 5, opacity: 0.85 }).addTo(map);
+            const km = j.routes[0].distance / 1000;
+            const mins = Math.max(1, Math.round(j.routes[0].duration / 60));
+            liveMain.textContent = `${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'} to destination \u2022 ~${mins} min`;
+          }
+        } catch (e) { console.warn('Route failed:', e); }
+      }
+
+      function showDriver(lat, lng, updatedAt) {
+        if (typeof lat !== 'number' || typeof lng !== 'number' || (lat === 0 && lng === 0)) return;
+        const pos = [lat, lng];
+        if (!driverMarker) {
+          driverMarker = L.marker(pos, { icon: dot('#2e7d32'), zIndexOffset: 1000 }).addTo(map).bindPopup('Your driver');
+        } else {
+          driverMarker.setLatLng(pos);
+        }
+        if (!hasFix) {                       // first fix: show the driver right away
+          hasFix = true;
+          map.setView(pos, 16, { animate: true });
+          if (!hasDest) liveMain.textContent = 'Your driver is on the way';
+        } else if (followDriver) {
+          map.panTo(pos, { animate: true });
+        }
+        liveSub.textContent = `Driver location updated ${ago(updatedAt) || 'just now'}`;
+        drawRoute(lat, lng);
+      }
+
+      function applyRide(r) {
+        if (!r) return;
+        if (r.driver_lat != null && r.driver_lng != null) {
+          showDriver(Number(r.driver_lat), Number(r.driver_lng), r.driver_location_at);
+        }
+      }
+      applyRide(rideData);
+
+      // Instant updates when the driver's row changes (falls back to the 2 s poll below)
+      try {
+        _supabase.channel('ride_live_' + rideId)
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` },
+            (payload) => applyRide(payload.new))
+          .subscribe();
+      } catch (e) { console.warn('Realtime unavailable, using polling:', e); }
+
+      if (rideData.fare) {
+        document.querySelector('.fare-amount').textContent = `₱ ${rideData.fare}.00`;
+      }
+
+      if (rideData.driver_id) {
+        const details = await TriDriver.getDetails(rideData.driver_id, rideData);
+        TriDriver.render(document.getElementById('driver-details'), details);
+        const profileLink = document.getElementById('driver-profile-link');
+        profileLink.style.display = 'block';
+        profileLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          const currentUrl = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `profile.html?id=${rideData.driver_id}&return=${currentUrl}`;
+        });
+      }
+
+      // Special (Arkila) label
+      if (rideData.ride_type === 'Special') {
+        document.querySelector('.status-badge').textContent =
+          rideData.trip_mode === 'hourly' ? `Arkila \u2022 ${rideData.hire_hours || 1} hr hire` : 'Special trip \u2022 Enjoy your ride!';
+      }
+
+      // Passenger can't end the trip; wait for the driver to complete it.
+      let tripEnded = false;
+      let statusPoll = null;
+      const goToRating = () => {
+        if (tripEnded) return;
+        tripEnded = true;
+        clearInterval(statusPoll);
+        try { TriSound.play('complete'); } catch (e) {}
+        window.location.href = `rating.html?ride_id=${rideId}`;
+      };
+
+      if (rideData.status === 'completed') { goToRating(); return; }
+
+      statusPoll = setInterval(async () => {
+        const { data } = await _supabase.from('rides')
+          .select('*').eq('id', rideId).maybeSingle();
+        if (!data) return;
+        if (data.status === 'completed') { goToRating(); return; }
+        applyRide(data);
+      }, 3000);
+    });
+  </script>
+</body>
+</html>

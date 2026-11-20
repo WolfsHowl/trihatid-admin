@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Driver Pickup</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .trip-card {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 88%;
+      max-width: 400px;
+      background-color: #ffffff;
+      padding: 18px 16px;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 78vh;
+      overflow-y: auto;
+    }
+    .status-badge {
+      background-color: #2e7d32;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      align-self: center;
+    }
+    .action-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .btn-secondary-action {
+      flex: 1;
+      padding: 10px;
+      background-color: #f0f0f0;
+      color: #333;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      border: 1px solid #ccc;
+    }
+    .passenger-block {
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map" style="width: 100vw; height: 100vh; position: absolute; top: 0; left: 0;"></div>
+
+  <div class="trip-card">
+    <div class="status-badge">Heading to Passenger Pickup</div>
+    <div id="passengers-list-container" style="display: flex; flex-direction: column; gap: 12px;"></div>
+    <div id="additional-requests-container"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script src="notify.js"></script>
+  <script src="driver-tracker.js"></script>
+  <script>
+    (function () {
+      let map = null;
+      let driverMarker = null;
+      let secondaryRouteLines = [];
+      let secondaryMarkers = [];
+      const pinColor = "#2e7d32";
+
+      document.addEventListener("DOMContentLoaded", async function () {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const rideId = urlParams.get('ride_id');
+
+          if (!rideId) return;
+
+          const { data: ride, error: rideErr } = await _supabase
+            .from('rides')
+            .select('*')
+            .eq('id', rideId)
+            .single();
+
+          if (rideErr || !ride) return;
+          window._ride = ride;
+
+          const initialLat = ride.pickup_lat || 11.5833;
+          const initialLng = ride.pickup_lng || 122.4833;
+
+          map = L.map('map', { zoomControl: false }).setView([initialLat, initialLng], 13);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+          }).addTo(map);
+
+          setTimeout(() => map.invalidateSize(), 300);
+
+          const { data: { user } } = await _supabase.auth.getUser();
+          if (user) {
+            await renderAllPassengerCards(user.id);
+          }
+
+          if (user) {
+            TriTracker.start(user.id, (lat, lng) => {
+              updateDriverAndRoutes(lat, lng, user.id).catch(e => console.warn("Geo update error:", e));
+            });
+          }
+
+          setInterval(() => {
+            if (window._ride && window._ride.ride_type !== 'Special') {
+              pollAdditionalRegularRequests();
+            }
+          }, 5000);
+        } catch (e) {
+          console.error("Initialization error:", e);
+        }
+      });
+
+      async function updateDriverAndRoutes(lat, lng, driverId) {
+        if (!map) return;
+        const driverCoords = [lat, lng];
+        
+        if (!driverMarker) {
+          driverMarker = L.marker(driverCoords, {
+            icon: L.divIcon({
+              className: 'custom-driver-pin',
+              html: `<div style="background-color: ${pinColor}; width: 18px; height: 18px; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
+              iconSize: [24, 24],
+              iconAnchor: [12, 12]
+            })
+          }).addTo(map).bindPopup('Your Location');
+        } else {
+          driverMarker.setLatLng(driverCoords);
+        }
+
+        if (driverId) {
+          await renderAllPassengerRoutes(lat, lng, driverId);
+        }
+      }
+
+      async function renderAllPassengerCards(driverId) {
+        const container = document.getElementById('passengers-list-container');
+        if (!container) return;
+
+        const { data: activeRides, error } = await _supabase
+          .from('rides')
+          .select('*')
+          .eq('driver_id', driverId)
+          .in('status', ['accepted', 'ongoing', 'active', 'arriving'])
+          .order('created_at', { ascending: true });
+
+        if (error || !activeRides || activeRides.length === 0) {
+          window.location.href = "driver-dashboard.html";
+          return;
+        }
+
+        container.innerHTML = '';
+
+        for (let i = 0; i < activeRides.length; i++) {
+          const ride = activeRides[i];
+          let passName = ride.passenger_name || 'Passenger';
+          let passAvatar = null;
+          let passPhone = '';
+
+          if (ride.passenger_id) {
+            try {
+              const { data: p } = await _supabase.from('profiles').select('*').eq('id', ride.passenger_id).maybeSingle();
+              if (p) {
+                passName = p.fullname || p.full_name || p.name || passName;
+                passAvatar = p.avatar_url || p.avatar || null;
+                passPhone = p.phone ? String(p.phone).replace(/[^\d+]/g, '') : '';
+              }
+            } catch (profileErr) {}
+          }
+
+          const isPrimary = i === 0;
+          const currentUrl = encodeURIComponent(window.location.pathname + window.location.search);
+
+          const cardHtml = `
+            <div class="passenger-block" id="pax-card-${ride.id}">
+              <div style="text-align: left;">
+                <span style="font-size: 11px; color: #666; display:block;">${isPrimary ? 'Primary Pickup' : 'Secondary Pickup'}</span>
+                <span style="font-size: 13px; font-weight: 700; color: #1d1d1f;">${TriUtil.esc(ride.pickup)}</span>
+              </div>
+
+              <div class="passenger-profile" onclick="window.location.href='profile.html?id=${ride.passenger_id}&return=${currentUrl}'" style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+                <div class="passenger-avatar" style="width: 40px; height: 40px; border-radius: 50%; background-color: #ccc; overflow: hidden; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #555;">
+                  ${passAvatar ? `<img src="${passAvatar}" style="width:100%; height:100%; object-fit:cover;">` : passName.charAt(0).toUpperCase()}
+                </div>
+                <div style="flex: 1; text-align: left;">
+                  <span class="passenger-name" style="font-size: 14px; font-weight: 700; color: #1d1d1f;">${TriUtil.esc(passName)}</span>
+                  <span style="font-size: 11px; color: #666; display: block;">Tap to view profile • ₱${ride.fare || 40}.00</span>
+                </div>
+              </div>
+
+              <div class="action-row">
+                <a href="messages.html?ride_id=${ride.id}&return=${currentUrl}" class="btn-secondary-action">Chat</a>
+                ${passPhone ? `<a href="tel:${passPhone}" class="btn-secondary-action">Call</a><a href="sms:${passPhone}" class="btn-secondary-action">Text</a>` : ''}
+              </div>
+              <a href="report.html?as=driver&ride_id=${ride.id}" style="text-align:center; color:#c62828; font-size:12px; font-weight:700; text-decoration:none;">Report this passenger</a>
+
+              <button onclick="startOrTransitionTrip('${ride.id}')" style="background:#2e7d32; color:#fff; border:none; padding:8px; border-radius:10px; font-weight:bold; font-size:12px; cursor:pointer; width:100%;">
+                ${isPrimary ? 'Start Trip' : 'Complete Pickup'}
+              </button>
+            </div>
+          `;
+          container.insertAdjacentHTML('beforeend', cardHtml);
+        }
+      }
+
+      window.startOrTransitionTrip = async function (rideId) {
+        const { data: activeRides } = await _supabase
+          .from('rides')
+          .select('*')
+          .eq('id', rideId)
+          .single();
+
+        if (activeRides) {
+          await _supabase.from('rides').update({ status: 'ongoing' }).eq('id', rideId);
+          TriNotify.queueSms(rideId, activeRides.passenger_id, 'started');
+          window.location.href = `driver-on-trip.html?ride_id=${rideId}`;
+        }
+      };
+
+      async function pollAdditionalRegularRequests() {
+        try {
+          const { data: searchRides } = await _supabase
+            .from('rides')
+            .select('*')
+            .eq('status', 'searching')
+            .is('driver_id', null)
+            .neq('ride_type', 'Special')
+            .order('created_at', { ascending: false });
+
+          const container = document.getElementById('additional-requests-container');
+          if (!container || !searchRides || searchRides.length === 0) return;
+
+          container.innerHTML = `
+            <div style="border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px; text-align: left;">
+              <span style="font-size: 11px; font-weight: 700; color: #214329;">New Regular Requests Nearby (${searchRides.length})</span>
+            </div>` + 
+            searchRides.map(r => `
+              <div style="background: #f8f9fa; padding: 10px; border-radius: 12px; border: 1px solid #ddd; margin-top: 8px; text-align: left;">
+                <div style="font-size: 12px; font-weight: 700; color: #214329;">${TriUtil.esc(r.pickup)} ➔ ${TriUtil.esc(r.destination)}</div>
+                <div style="font-size: 11px; color: #555; margin: 2px 0;">₱${TriUtil.esc(r.fare)}.00 • Seats: ${TriUtil.esc(r.passenger_count || 1)}</div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                  <button onclick="acceptAdditionalRide('${r.id}')" style="flex: 1; background:#2e7d32; color:#fff; border:none; padding:6px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">Accept</button>
+                </div>
+              </div>
+            `).join('');
+        } catch (e) {}
+      }
+
+      window.acceptAdditionalRide = async function (newRideId) {
+        const { data: { user } } = await _supabase.auth.getUser();
+        if (!user) return;
+
+        const { data } = await _supabase.from('rides')
+          .update({ driver_id: user.id, status: 'accepted' })
+          .eq('id', newRideId)
+          .is('driver_id', null)
+          .select();
+
+        if (data && data.length > 0) {
+          const { data: prof } = await _supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+          const name = (prof && (prof.fullname || prof.full_name || prof.name)) || user.user_metadata?.fullname || 'Driver';
+          await TriChat.sendDriverGreeting(data[0].passenger_id, user.id, name);
+          location.reload();
+        }
+      };
+
+      async function renderAllPassengerRoutes(driverLat, driverLng, driverId) {
+        if (!map) return;
+        secondaryMarkers.forEach(m => map.removeLayer(m));
+        secondaryRouteLines.forEach(l => map.removeLayer(l));
+        secondaryMarkers = [];
+        secondaryRouteLines = [];
+
+        const { data: activeRides } = await _supabase
+          .from('rides')
+          .select('*')
+          .eq('driver_id', driverId)
+          .in('status', ['accepted', 'ongoing', 'active', 'arriving']);
+
+        if (!activeRides || activeRides.length === 0) return;
+
+        for (let i = 0; i < activeRides.length; i++) {
+          const ride = activeRides[i];
+          const pLat = ride.pickup_lat || 11.5833;
+          const pLng = ride.pickup_lng || 122.4833;
+
+          const pin = L.divIcon({
+            className: 'custom-pin',
+            html: `<div style="background-color: ${pinColor}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.4);"></div>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
+          });
+
+          const marker = L.marker([pLat, pLng], { icon: pin })
+            .addTo(map)
+            .bindPopup(`<b>Pickup:</b> ${TriUtil.esc(ride.pickup)}`);
+          secondaryMarkers.push(marker);
+
+          try {
+            const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverLng},${driverLat};${pLng},${pLat}?overview=full&geometries=geojson`);
+            const data = await res.json();
+            if (data.routes && data.routes.length > 0) {
+              const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+              let closestIndex = 0;
+              let minDistance = Infinity;
+
+              coords.forEach((coord, index) => {
+                const dist = Math.hypot(coord[0] - driverLat, coord[1] - driverLng);
+                if (dist < minDistance) {
+                  minDistance = dist;
+                  closestIndex = index;
+                }
+              });
+
+              const traveled = coords.slice(0, closestIndex + 1);
+              const remaining = coords.slice(closestIndex);
+
+              const tLine = L.polyline(traveled, { color: '#b0b0b0', weight: 4, opacity: 0.7 }).addTo(map);
+              const rLine = L.polyline(remaining, { color: pinColor, weight: i === 0 ? 5 : 4, opacity: 0.9, dashArray: i === 0 ? null : '4, 4' }).addTo(map);
+              secondaryRouteLines.push(tLine, rLine);
+            }
+          } catch (e) {}
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Send Feedback</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .fb-stars { display: flex; gap: 8px; justify-content: center; }
+    .fb-star { font-size: 32px; color: #ccc; cursor: pointer; background: none; border: none; }
+    .fb-star.on { color: #f1c40f; }
+    textarea.input1 { height: 120px; resize: none; padding-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="sub-page">
+    <div class="sub-head">
+      <a href="#" id="back-btn" aria-label="Back">←</a>
+      <h2>Send Feedback</h2>
+    </div>
+
+    <div class="sub-stack">
+      <div class="guide-card">
+        <h3>Help us improve TriHatid</h3>
+        <p>Tell us what is working, what is not, or what you would like to see. For problems with a specific driver or trip, use <a href="report.html" style="color:#c62828; font-weight:700;">Report an Issue</a> instead.</p>
+      </div>
+
+      <div class="guide-card">
+        <label class="label" for="fb-category">Type</label>
+        <select id="fb-category" class="input1">
+          <option value="suggestion">Suggestion</option>
+          <option value="bug">Something is not working</option>
+          <option value="compliment">Compliment</option>
+          <option value="other">Other</option>
+        </select>
+
+        <label class="label" for="fb-message" style="margin-top: 12px; display:block;">Your feedback</label>
+        <textarea id="fb-message" class="input1" maxlength="1000" placeholder="Write your feedback here..."></textarea>
+
+        <p class="label" style="margin-top: 12px;">Rate the app (optional)</p>
+        <div class="fb-stars" id="fb-stars">
+          <button type="button" class="fb-star" data-v="1" aria-label="1 star">★</button>
+          <button type="button" class="fb-star" data-v="2" aria-label="2 stars">★</button>
+          <button type="button" class="fb-star" data-v="3" aria-label="3 stars">★</button>
+          <button type="button" class="fb-star" data-v="4" aria-label="4 stars">★</button>
+          <button type="button" class="fb-star" data-v="5" aria-label="5 stars">★</button>
+        </div>
+
+        <button type="button" id="fb-send" class="button1" style="margin-top: 16px; border:none; width:100%; cursor:pointer;">Send Feedback</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="notify.js"></script>
+<script>
+  let appRating = 0;
+  const $ = id => document.getElementById(id);
+
+  $('back-btn').addEventListener('click', e => {
+    e.preventDefault();
+    if (document.referrer) window.history.back();
+    else window.location.href = localStorage.getItem('user_role') === 'driver' ? 'driver-dashboard.html?view=profile' : 'home.html?view=profile';
+  });
+
+  document.querySelectorAll('.fb-star').forEach(st => st.addEventListener('click', () => {
+    appRating = Number(st.dataset.v);
+    document.querySelectorAll('.fb-star').forEach(o => o.classList.toggle('on', Number(o.dataset.v) <= appRating));
+  }));
+
+  $('fb-send').addEventListener('click', async () => {
+    const message = $('fb-message').value.trim();
+    if (!message) { alert('Please write your feedback first.'); return; }
+
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) { window.location.href = 'login.html'; return; }
+
+    $('fb-send').disabled = true;
+    const { error } = await _supabase.from('feedback').insert([{
+      user_id: user.id,
+      role: user.user_metadata?.role || localStorage.getItem('user_role') || 'passenger',
+      category: $('fb-category').value,
+      rating: appRating || null,
+      message: message
+    }]);
+    $('fb-send').disabled = false;
+
+    if (error) {
+      alert('Could not send feedback: ' + error.message + '\n\n(If the table is missing, run supabase/migration-features.sql.)');
+      return;
+    }
+    TriNotify.toast('Thank you!', 'Your feedback was sent.');
+    $('fb-message').value = '';
+    appRating = 0;
+    document.querySelectorAll('.fb-star').forEach(o => o.classList.remove('on'));
+  });
+</script>
+</body>
+</html>

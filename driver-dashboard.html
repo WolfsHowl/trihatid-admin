@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Driver Mode</title>
+  
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #ffffff;
+    }
+    .driver-wrapper {
+      position: relative;
+      width: 100vw;
+      height: calc(100vh - 75px);
+      overflow: hidden;
+    }
+    .driver-overlay-card {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      margin: 0 auto;
+      width: calc(100% - 32px);
+      background-color: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+      padding: 18px 16px;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-sizing: border-box;
+    }
+    .panel-view {
+      padding: 20px;
+      height: calc(100vh - 90px);
+      overflow-y: auto;
+      box-sizing: border-box;
+      background-color: #f8f9fa;
+      text-align: left;
+    }
+    .panel-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #1d1d1f;
+      margin-bottom: 14px;
+    }
+    .fb-summary {
+      background: #ffffff;
+      padding: 16px;
+      border-radius: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    .fb-summary .big {
+      font-size: 32px;
+      font-weight: 800;
+      color: #214329;
+    }
+    .fb-card, .hist-card {
+      background: #ffffff;
+      padding: 14px;
+      border-radius: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .fb-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+    .fb-who { font-weight: 700; color: #1d1d1f; }
+    .fb-date { color: #888; font-size: 11px; }
+    .fb-stars, .hist-stars { color: #f1c40f; font-size: 14px; }
+    .fb-route, .hist-route { font-size: 13px; font-weight: 700; color: #214329; }
+    .fb-comment { font-size: 13px; color: #444; margin-top: 4px; }
+    .fb-empty { background: #fff; padding: 20px; border-radius: 12px; text-align: center; color: #666; font-size: 13px; }
+    .hist-meta { font-size: 11px; color: #666; }
+    .hist-fare { font-weight: 800; font-size: 15px; }
+  </style>
+</head>
+
+<body>
+  <div class="driver-wrapper">
+    
+    <!-- MAP & STATUS OVERLAY -->
+    <div id="view-home" class="view-content active">
+      <div class="map-container">
+        <div id="map"></div>
+      </div>
+
+      <div class="driver-overlay-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h2 style="margin: 0; font-size: 18px; color: #214329;">Driver Mode</h2>
+        </div>
+        <div id="doc-warning" class="doc-warning" style="display:none;" onclick="window.location.href='edit-profile.html';"></div>
+        <p id="driver-status-text" style="margin: 0; font-size: 12px; color: #555;">Active. Scanning for passengers...</p>
+        
+        <div id="requests-list-container" style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px;"></div>
+      </div>
+    </div>
+
+    <!-- ACTIVITY HISTORY -->
+    <div id="view-history" class="view-content">
+      <div class="panel-view">
+        <h2 class="panel-title">Activity History</h2>
+        <div id="driver-history-list" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="background: #fff; padding: 14px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-weight: 700;">Loading driver history...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FEEDBACK FROM PASSENGERS -->
+    <div id="view-feedback" class="view-content">
+      <div class="panel-view">
+        <h2 class="panel-title">Feedback</h2>
+        <div id="driver-feedback-summary"></div>
+        <div id="driver-feedback-list" style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="fb-empty">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DRIVER PROFILE -->
+    <div id="view-profile" class="view-content">
+      <div class="panel-view">
+        <h2 class="panel-title">Account</h2>
+        
+        <div class="profile-header" id="driver-profile-clickable" style="cursor: pointer; border-radius: 12px; margin-bottom: 10px; transition: opacity 0.2s;">
+          <div class="profile-avatar">J</div>
+          <div>
+            <h3 style="margin: 0; font-size: 16px; color: #1d1d1f;">Juan Dela Cruz</h3>
+            <p style="margin: 2px 0 0 0; font-size: 12px; color: #666; font-weight: 700;">Tricycle Driver</p>
+          </div>
+        </div>
+
+        <div class="profile-menu-item" onclick="window.location.href='edit-profile.html';">
+          <span>Edit Profile</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="window.location.href='messages.html';">
+          <span>Messages</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="window.location.href='notifications.html';">
+          <span>Notifications &amp; Sound</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="window.location.href='feedback.html';">
+          <span>Send Feedback</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="window.location.href='register-guide.html';">
+          <span>How to register: Grab, Angkas, Joyride</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="handleLogout()" style="color: #c62828;">
+          <span>Log Out</span>
+          <span>❯</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM NAVIGATION BAR -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" id="nav-home" onclick="switchView('home')" type="button">
+        <div class="nav-icon icon-home"></div>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" id="nav-history" onclick="switchView('history')" type="button">
+        <div class="nav-icon icon-history"></div>
+        <span>History</span>
+      </button>
+      <button class="nav-item" id="nav-feedback" onclick="switchView('feedback')" type="button">
+        <div class="nav-icon icon-feedback"></div>
+        <span>Feedback</span>
+      </button>
+      <button class="nav-item" id="nav-profile" onclick="switchView('profile')" type="button">
+        <div class="nav-icon icon-profile"></div>
+        <span>Account</span>
+      </button>
+    </nav>
+
+  </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="notify.js"></script>
+<script src="driver-info.js"></script>
+<script>
+  let map;
+  let driverMarker = null;
+  let requestMarker = null; 
+  let lastSelectedRideId = null;
+  const seenRequestIds = new Set();
+
+  async function tryRegisterPush(driverId) {
+    try {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications) {
+        const { PushNotifications } = window.Capacitor.Plugins;
+        let perm = await PushNotifications.checkPermissions();
+        if (perm.receive === 'prompt') {
+          perm = await PushNotifications.requestPermissions();
+        }
+        if (perm.receive === 'granted') {
+          await PushNotifications.register();
+          PushNotifications.addListener('registration', async (token) => {
+            await _supabase.from('profiles').update({ fcm_token: token.value }).eq('id', driverId);
+          });
+          PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+            const rideId = notification.notification?.data?.ride_id;
+            if (rideId) {
+              setTimeout(() => {
+                if (typeof toggleRequestPin === 'function') {
+                  toggleRequestPin(rideId);
+                }
+              }, 1000);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.log("Push notifications not active in this environment:", e);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) { window.location.replace('login.html'); return; }
+
+    // Role comes from the account itself (localStorage can be cleared by the OS while idle)
+    if (TriAuth.roleOf(user) !== 'driver') {
+      alert("Unauthorized access. Redirecting to passenger home.");
+      window.location.href = 'home.html';
+      return;
+    }
+    try { localStorage.setItem('user_role', 'driver'); } catch (e) {}
+
+    if (user) {
+      const { data: profile } = await _supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const fullName = profile?.fullname || user.user_metadata?.fullname || 'User';
+      const avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url;
+
+      const profileNameEl = document.querySelector('#view-profile h3');
+      if (profileNameEl) profileNameEl.textContent = fullName;
+
+      checkDriverDocuments(user, profile);
+      tryRegisterPush(user.id);
+
+      const avatarEl = document.querySelector('.profile-avatar');
+      if (avatarEl) {
+        if (avatarUrl) {
+          avatarEl.innerHTML = `<img src="${avatarUrl}" alt="Profile" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        } else if (fullName) {
+          avatarEl.textContent = fullName.charAt(0).toUpperCase();
+        }
+      }
+    }
+
+    loadDriverHistory();
+    loadDriverFeedback();
+
+    map = L.map('map', { zoomControl: false }).setView([11.59, 122.37], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        map.setView([lat, lng], 16);
+
+        const driverIcon = L.divIcon({
+          className: 'custom-driver-pin',
+          html: `<div style="background-color: #2e7d32; width: 18px; height: 18px; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+        driverMarker = L.marker([lat, lng], { icon: driverIcon }).addTo(map).bindPopup("You are here");
+      }, (err) => {
+        console.warn("Initial geolocation failed: ", err.message);
+      }, { enableHighAccuracy: true });
+
+      navigator.geolocation.watchPosition((position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        if (driverMarker) {
+          driverMarker.setLatLng([lat, lng]);
+        } else {
+          const driverIcon = L.divIcon({
+            className: 'custom-driver-pin',
+            html: `<div style="background-color: #2e7d32; width: 18px; height: 18px; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+          driverMarker = L.marker([lat, lng], { icon: driverIcon }).addTo(map).bindPopup("You are here");
+        }
+      }, null, { enableHighAccuracy: true });
+    }
+
+    const statusText = document.getElementById('driver-status-text');
+    let pollTimer = null;
+
+    const pollRequests = async () => {
+      const { data } = await _supabase
+        .from('rides')
+        .select('*')
+        .eq('status', 'searching')
+        .is('driver_id', null)
+        .order('created_at', { ascending: false });
+
+      const container = document.getElementById('requests-list-container');
+      if (!container) return;
+
+      if (data && data.length > 0) {
+        statusText.textContent = `Active. Found ${data.length} active request(s)...`;
+
+        let hasNew = false;
+        data.forEach(r => { if (!seenRequestIds.has(r.id)) { seenRequestIds.add(r.id); hasNew = true; } });
+        if (hasNew) {
+          TriNotify.notify({ title: 'New ride request', body: 'A passenger is looking for a tricycle.', sound: 'request', vibrate: [250, 100, 250] });
+        }
+
+        window._requests = {};
+        data.forEach(r => { window._requests[r.id] = r; });
+        const esc = TriUtil.esc;
+
+        container.innerHTML = data.map(ride => {
+          const special = ride.ride_type === 'Special';
+          const badge = special
+            ? `<span class="badge-special">${ride.trip_mode === 'hourly' ? 'ARKILA · ' + esc(ride.hire_hours || 1) + ' HR' : 'SPECIAL'}</span> ` : '';
+          return `
+          <div data-ride="${esc(ride.id)}" class="req-card" onclick="toggleRequestPin('${esc(ride.id)}')" style="background: #f8f9fa; padding: 12px; border-radius: 12px; border: 1px solid #ddd; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; cursor: pointer; transition: background 0.2s;">
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #214329;">${badge}${esc(ride.pickup)} ➔ ${esc(ride.destination)}</div>
+              <div style="font-size: 11px; color: #2e7d32; font-weight: 600; margin-top: 2px;">₱${esc(ride.fare)}.00 • Seats Needed: ${esc(ride.passenger_count || 1)}</div>
+            </div>
+            <div style="display: flex; gap: 8px;" onclick="event.stopPropagation();">
+              <button onclick="acceptRide('${esc(ride.id)}')" style="flex: 1; background:#2e7d32; color:#fff; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">Accept</button>
+              <button onclick="declineRide('${esc(ride.id)}')" style="flex: 1; background:#c62828; color:#fff; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">Decline</button>
+            </div>
+          </div>`;
+        }).join('');
+      } else {
+        container.innerHTML = '';
+        statusText.textContent = 'Active. Scanning for passengers...';
+        if (requestMarker) {
+          map.removeLayer(requestMarker);
+          requestMarker = null;
+          lastSelectedRideId = null;
+        }
+      }
+    };
+
+    pollRequests();
+    pollTimer = setInterval(pollRequests, 3000);
+
+    _supabase.channel('public_searching_rides')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, () => {
+        pollRequests();
+      })
+      .subscribe();
+  });
+
+  function toggleRequestPin(rideId) {
+    const r = (window._requests || {})[rideId] || {};
+    const pickupText = r.pickup || 'Pickup';
+    const lat = Number(r.pickup_lat) || 11.59;
+    const lng = Number(r.pickup_lng) || 122.37;
+    if (lastSelectedRideId === rideId) {
+      if (requestMarker) {
+        map.removeLayer(requestMarker);
+        requestMarker = null;
+      }
+      lastSelectedRideId = null;
+    } else {
+      if (requestMarker) {
+        map.removeLayer(requestMarker);
+      }
+
+      const requestIcon = L.divIcon({
+        className: 'custom-request-pin',
+        html: `<div style="background-color: #214329; width: 14px; height: 14px; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 0 6px rgba(0,0,0,0.4);"></div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      });
+
+      requestMarker = L.marker([lat, lng], { icon: requestIcon }).addTo(map)
+        .bindPopup(`<b>Pickup:</b> ${TriUtil.esc(pickupText)}`).openPopup();
+
+      map.setView([lat, lng], 16, { animate: true });
+      lastSelectedRideId = rideId;
+    }
+  }
+
+  async function acceptRide(rideId) {
+    const { data: { user }, error: authError } = await _supabase.auth.getUser();
+    if (authError || !user) {
+      alert("You must be logged in as a driver.");
+      window.location.href = "login.html";
+      return;
+    }
+
+    const metadata = user.user_metadata || {};
+    const { data: prof } = await _supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    // Prefer the saved profile name (it is updated by Edit Profile; the login metadata can be stale).
+    const driverName = (prof && (prof.fullname || prof.full_name || prof.name)) || metadata.fullname || 'Driver';
+    const driverAvatar = prof?.avatar_url || metadata.avatar_url || null;
+    const pick = (...v) => v.find(x => x && String(x).trim() !== '') || null;
+
+    const claim = r => _supabase.from('rides').update(r).eq('id', rideId).is('driver_id', null).select();
+    const claimFields = {
+      driver_id: user.id,
+      status: 'accepted',
+      driver_name: driverName,
+      driver_avatar_url: driverAvatar,
+      driver_phone: pick(prof?.phone, metadata.phone),
+      driver_plate: pick(prof?.plate_no, metadata.plate_no),
+      driver_body_no: pick(prof?.body_no, metadata.body_no),
+      driver_permit_no: pick(prof?.operator_permit_no, prof?.franchise_no, metadata.operator_permit_no, metadata.franchise_no)
+    };
+    const optionalCols = ['driver_phone', 'driver_plate', 'driver_body_no', 'driver_permit_no'];
+    const { data, error } = await TriUtil.writeWithFallback(claim, claimFields, optionalCols);
+
+    if (error || !data || data.length === 0) {
+      alert("Ride has already been accepted by another driver or is no longer available.");
+      return;
+    }
+
+    const claimedRide = data[0];
+    const passengerId = claimedRide.passenger_id;
+    const driverId = user.id;
+
+    // Automatic introduction in the chat so it persists in the message history
+    await TriChat.sendDriverGreeting(passengerId, driverId, driverName);
+
+    TriNotify.queueSms(rideId, passengerId, 'accepted');
+
+    alert("Ride accepted successfully! Proceeding to pickup location.");
+    window.location.href = `driver-pickup.html?ride_id=${rideId}`;
+  }
+
+  async function declineRide(rideId) {
+    const { error } = await _supabase.from('rides').update({ 
+      status: 'declined' 
+    }).eq('id', rideId);
+
+    if (error) {
+      alert("Could not decline ride: " + error.message);
+    }
+  }
+
+  function switchView(viewName) {
+    document.querySelectorAll('.view-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById(`view-${viewName}`).classList.add('active');
+    document.getElementById(`nav-${viewName}`).classList.add('active');
+    if (viewName === 'home' && map) setTimeout(() => map.invalidateSize(), 150);
+    if (viewName === 'history') loadDriverHistory();
+    if (viewName === 'feedback') loadDriverFeedback();
+
+    try {
+      const url = new URL(window.location.href);
+      if (viewName === 'home') url.searchParams.delete('view');
+      else url.searchParams.set('view', viewName);
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    } catch (e) { /* ignore */ }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const requested = new URLSearchParams(window.location.search).get('view');
+    if (requested && ['history', 'feedback', 'profile'].includes(requested)) switchView(requested);
+  });
+
+  const newestFirst = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
+
+  async function loadDriverFeedback() {
+    const list = document.getElementById('driver-feedback-list');
+    const summary = document.getElementById('driver-feedback-summary');
+    if (!list) return;
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: rides, error } = await _supabase
+      .from('rides')
+      .select('*')
+      .eq('driver_id', user.id)
+      .not('rating', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (error || !rides || rides.length === 0) {
+      if (summary) summary.innerHTML = '';
+      list.innerHTML = '<div class="fb-empty">No feedback yet.<br>Ratings and comments from your passengers will show up here.</div>';
+      return;
+    }
+
+    rides.sort(newestFirst);
+    const esc = TriUtil.esc;
+    const avg = rides.reduce((s, r) => s + (Number(r.rating) || 0), 0) / rides.length;
+    const full = Math.round(avg);
+    if (summary) {
+      summary.innerHTML = `
+        <div class="fb-summary">
+          <div class="big">${avg.toFixed(1)}</div>
+          <div>
+            <div class="stars">${'\u2605'.repeat(full)}${'\u2606'.repeat(5 - full)}</div>
+            <small>${rides.length} rating${rides.length === 1 ? '' : 's'} from passengers</small>
+          </div>
+        </div>`;
+    }
+
+    const BAD = ['Unsafe driving', 'Rude', 'Late', 'Dirty tricycle', 'Took a long route', 'Overcharged'];
+    list.innerHTML = rides.map(ride => {
+      const date = ride.created_at ? new Date(ride.created_at).toLocaleDateString() : '';
+      const tags = (ride.rating_tags || '').split(',').map(t => t.trim()).filter(Boolean);
+      return `
+      <div class="fb-card">
+        <div class="fb-top">
+          <div class="fb-who">${esc(ride.passenger_name || 'Passenger')}</div>
+          <div class="fb-date">${esc(date)}</div>
+        </div>
+        <div class="fb-stars">${'\u2605'.repeat(ride.rating)}${'\u2606'.repeat(5 - ride.rating)}</div>
+        <div class="fb-route">${esc(ride.pickup)} \u2794 ${esc(ride.destination)}</div>
+        ${tags.length ? `<div class="fb-tags">${tags.map(t => `<span class="${BAD.includes(t) ? 'bad' : ''}">${esc(t)}</span>`).join('')}</div>` : ''}
+        ${ride.feedback ? `<div class="fb-comment">${esc(ride.feedback)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  let refreshBusy = false;
+  async function refreshDriverLists() {
+    if (refreshBusy) return;
+    refreshBusy = true;
+    try { await Promise.all([loadDriverHistory(), loadDriverFeedback()]); }
+    catch (e) { console.warn('Refresh failed:', e); }
+    finally { refreshBusy = false; }
+  }
+  window.addEventListener('pageshow', refreshDriverLists);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshDriverLists(); });
+  window.addEventListener('focus', refreshDriverLists);
+  setInterval(() => { if (!document.hidden) refreshDriverLists(); }, 10000);
+  
+  document.addEventListener('DOMContentLoaded', async () => {
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return;
+    _supabase.channel('driver_rides_' + user.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rides', filter: `driver_id=eq.${user.id}` }, refreshDriverLists)
+      .subscribe();
+  });
+
+  async function loadDriverHistory() {
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: rides, error } = await _supabase
+      .from('rides')
+      .select('*')
+      .eq('driver_id', user.id)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false });
+
+    const historyContainer = document.getElementById('driver-history-list');
+    if (!historyContainer) return;
+
+    if (error || !rides || rides.length === 0) {
+      historyContainer.innerHTML = `<div style="background: #fff; padding: 14px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); font-weight: 700;">No trips completed yet</div>`;
+      return;
+    }
+
+    rides.sort(newestFirst);
+    const esc = TriUtil.esc;
+    historyContainer.innerHTML = rides.map(ride => `
+      <div class="hist-card">
+        <div class="hist-route">${esc(ride.pickup)} \u2794 ${esc(ride.destination)}</div>
+        <div class="hist-meta">${ride.ride_type === 'Special' ? '<span class="badge-special">SPECIAL</span> ' : ''}Earned Fare${ride.created_at ? ' \u2022 ' + esc(new Date(ride.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : ''}</div>
+        ${ride.rating ? `<div class="hist-stars">${'\u2605'.repeat(ride.rating)}${'\u2606'.repeat(5 - ride.rating)}${ride.rating_tags ? ' <span style="color:#666;font-size:11px;">' + esc(ride.rating_tags) + '</span>' : ''}</div>` : ''}
+        <div class="hist-fare" style="color: #2e7d32;">PHP ${esc(ride.fare)}.00</div>
+      </div>
+    `).join('');
+  }
+
+  async function checkDriverDocuments(user, profile) {
+    const meta = user.user_metadata || {};
+    const pick = (...v) => v.hidden || v.find(x => x && String(x).trim() !== '') || '';
+    const fields = {
+      operator_permit_no: pick(profile?.operator_permit_no, profile?.franchise_no, meta.operator_permit_no, meta.franchise_no),
+      body_no: pick(profile?.body_no, meta.body_no),
+      plate_no: pick(profile?.plate_no, meta.plate_no),
+      rehistro_no: pick(profile?.rehistro_no, meta.rehistro_no)
+    };
+    const needsSync = Object.keys(fields).some(k => fields[k] && !profile?.[k]);
+    if (needsSync) {
+      const patch = { id: user.id };
+      Object.keys(fields).forEach(k => { if (fields[k] && !profile?.[k]) patch[k] = fields[k]; });
+      const { error } = await _supabase.from('profiles').upsert(patch);
+      if (error) console.warn('Could not sync vehicle details:', error.message);
+    }
+    const labels = { operator_permit_no: "Operator's Permit", body_no: 'Body No.', plate_no: 'Plate No.', rehistro_no: 'Rehistro' };
+    const missing = Object.keys(labels).filter(k => !fields[k]).map(k => labels[k]);
+    const banner = document.getElementById('doc-warning');
+    if (banner && missing.length) {
+      banner.textContent = 'Missing: ' + missing.join(', ') + '. Tap to complete your driver documents.';
+      banner.style.display = 'block';
+    }
+  }
+
+  async function handleLogout() {
+    await _supabase.auth.signOut();
+    localStorage.clear();
+    window.location.href = 'welcome.html';
+  }
+
+  const profileHeaderCard = document.getElementById('driver-profile-clickable');
+  if (profileHeaderCard) {
+    profileHeaderCard.addEventListener('click', async () => {
+      const { data: { user } } = await _supabase.auth.getUser();
+      if (user) {
+        const currentUrl = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `profile.html?id=${user.id}&return=${currentUrl}`;
+      }
+    });
+  }
+</script>
+</body>
+</html>

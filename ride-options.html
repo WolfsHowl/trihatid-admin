@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Choose a Ride</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .ride-container {
+      padding: 24px 20px; 
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      height: 100vh;
+      width: 100vw;
+      overflow-y: auto;
+      box-sizing: border-box;
+      background-color: #ffffff;
+    }
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .back-arrow {
+      text-decoration: none;
+      font-size: 20px;
+      color: #333;
+      font-weight: bold;
+    }
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1d1d1f;
+    }
+    .ride-option-card {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background-color: #ffffff;
+    }
+    .ride-option-card.selected {
+      border-color: #214329;
+      background-color: #f4f7f5;
+    }
+    .ride-icon {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%; 
+      object-fit: cover;   
+      margin-right: 16px;
+    }
+    .ride-details {
+      flex: 1;
+      text-align: left;
+    }
+    .ride-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1d1d1f;
+    }
+    .ride-price-info {
+      text-align: right;
+    }
+    .ride-fare {
+      font-size: 15px;
+      font-weight: 700;
+      color: #214329;
+    }
+    .ride-label {
+      font-size: 10px;
+      color: #888;
+    }
+    .payment-section {
+      margin-top: 10px;
+      border-top: 1px solid #eee;
+      padding-top: 16px;
+      text-align: left;
+    }
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    .payment-selector {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="ride-container">
+    <div class="header-row">
+      <a href="home.html" class="back-arrow">✕</a>
+      <h2 class="page-title">Choose a ride</h2>
+    </div>
+
+    <!-- Regular -->
+    <div class="ride-option-card selected" data-type="Regular">
+      <img src="regular.jpg" class="ride-icon" alt="Regular">
+      <div class="ride-details">
+        <span class="ride-name">Regular</span>
+        <p class="ride-label" style="font-size: 11px;">Shared tricycle &bull; may pick up other passengers on the way</p>
+      </div>
+      <div class="ride-price-info">
+        <span class="ride-fare" id="fare-regular">₱ 40.00</span>
+        <p class="ride-label" id="fare-regular-label">Base fare</p>
+      </div>
+    </div>
+
+    <!-- Special (Arkila) -->
+    <div class="ride-option-card" data-type="Special">
+      <img src="special.jpg" class="ride-icon" alt="Special">
+      <div class="ride-details">
+        <span class="ride-name">Special (Arkila)</span>
+        <p class="ride-label" style="font-size: 11px;">Exclusive trip &bull; just you, straight to your destination, or hire by the hour</p>
+      </div>
+      <div class="ride-price-info">
+        <span class="ride-fare" id="fare-special">₱ 60.00</span>
+        <p class="ride-label" id="fare-special-label">Base fare</p>
+      </div>
+    </div>
+
+    <!-- Arkila options (shown when Special is selected) -->
+    <div class="arkila-panel" id="arkila-panel">
+      <div>
+        <p class="section-label">How do you want to hire?</p>
+        <div class="seg" id="mode-seg">
+          <button type="button" data-mode="point_to_point" class="on">Special trip</button>
+          <button type="button" data-mode="hourly">Hourly arkila</button>
+        </div>
+      </div>
+      <div class="stepper" id="hours-row" style="display:none;">
+        <span>Hours to hire</span>
+        <div class="ctl">
+          <button type="button" id="hours-minus" aria-label="Fewer hours">&minus;</button>
+          <span id="hours-val">1</span>
+          <button type="button" id="hours-plus" aria-label="More hours">+</button>
+        </div>
+      </div>
+      <p class="fine-print" id="arkila-note">Special trip: the tricycle goes only to your pickup and destination, with no other passengers.</p>
+    </div>
+
+    <div class="stepper" id="pax-row" style="padding: 4px 2px;">
+      <span>Passengers</span>
+      <div class="ctl">
+        <button type="button" id="pax-minus" aria-label="Fewer passengers">&minus;</button>
+        <span id="pax-val">1</span>
+        <button type="button" id="pax-plus" aria-label="More passengers">+</button>
+      </div>
+    </div>
+
+    <div class="payment-section">
+      <p class="section-label">Payment method</p>
+      <div class="payment-selector">
+        <span>Cash</span>
+        <span style="color: #888; font-size: 10px;">❯</span>
+      </div>
+    </div>
+
+    <button type="button" id="confirm-ride-btn" class="button1" style="margin-top: auto;">
+      Confirm Ride
+    </button>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="notify.js"></script>
+<script>
+  const urlParams = new URLSearchParams(window.location.search);
+  const pickup = urlParams.get('pickup') || 'Kalibo Proper';
+  const destination = urlParams.get('destination') || '';
+  const destLat = parseFloat(urlParams.get('lat')) || 11.5833;
+  const destLng = parseFloat(urlParams.get('lng')) || 122.4833;
+  const pickupLat = parseFloat(urlParams.get('plat')) || 11.5833;
+  const pickupLng = parseFloat(urlParams.get('plng')) || 122.4833;
+  const hasDestCoords = urlParams.get('lat') !== null && urlParams.get('lng') !== null;
+
+  // ---- Hybrid Fare Calculation (Ordinance Matrix + Inter-Town Check + Distance Fallback) ----
+  function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  function computeHybridFare(pickupText, destinationText, lat1, lon1, lat2, lon2) {
+    if (!destinationText) return 15;
+    const destQuery = destinationText.toLowerCase();
+    const pickupQuery = (pickupText || '').toLowerCase();
+    const distKm = calculateDistanceKm(lat1, lon1, lat2, lon2);
+
+    // 1. Inter-Municipal / Cross-Boundary Check (e.g., Numancia to Kalibo)
+    const neighboringTowns = ['numancia', 'banga', 'new washington', 'lezo', 'malinao', 'makato'];
+    const isInterTown = neighboringTowns.some(town => pickupQuery.includes(town) || destQuery.includes(town));
+    
+    if (isInterTown || distKm > 3) {
+      if (distKm < 2) return 30;
+      if (distKm >= 2 && distKm < 4) return 45;
+      if (distKm >= 4 && distKm < 7) return 60;
+      return 60 + Math.ceil(distKm - 6) * 15;
+    }
+
+    // 2. Keyword Aliasing & Ordinance Matrix for Intra-Kalibo trips (Ordinance No. 2022-055)
+    const aliasMapping = [
+      { keywords: ['poblacion', 'kalibo public market', 'gaisano', 'plaza'], rate: 10 },
+      { keywords: ['andagao', 'akelco', 'jaime cardinal'], rate: 20 },
+      { keywords: ['bakhaw norte', 'libuton', 'kurumahan'], rate: 20 },
+      { keywords: ['new buswang', 'baybay', 'tapo-tapo', 'bakhawan'], rate: 20 },
+      { keywords: ['caano'], rate: 15 },
+      { keywords: ['estancia', 'tigayon boundary'], rate: 20 },
+      { keywords: ['linabuan norte'], rate: 25 },
+      { keywords: ['mabilo'], rate: 30 },
+      { keywords: ['mobo', 'bakueod'], rate: 20 },
+      { keywords: ['nalook'], rate: 20 },
+      { keywords: ['pook', 'bayanihan', 'tugbongan', 'airport'], rate: 20 },
+      { keywords: ['tigayon', 'tipakea'], rate: 25 },
+      { keywords: ['tinigaw', 'tinigao'], rate: 15 }
+    ];
+
+    for (const item of aliasMapping) {
+      if (item.keywords.some(keyword => destQuery.includes(keyword))) {
+        if (distKm > 3) break;
+        return item.rate;
+      }
+    }
+
+    // 3. General Distance-Based Fallback
+    let calculatedFare = 15; 
+    if (distKm >= 1 && distKm < 3) {
+      calculatedFare = 25;
+    } else if (distKm >= 3 && distKm < 6) {
+      calculatedFare = 45;
+    } else if (distKm >= 6) {
+      calculatedFare = 45 + Math.ceil(distKm - 5) * 15; 
+    }
+
+    return Math.max(calculatedFare, 15);
+  }
+
+  const baseCalculatedFare = computeHybridFare(pickup, destination, pickupLat, pickupLng, destLat, destLng);
+
+  const FARE_REGULAR = baseCalculatedFare;
+  const FARE_SPECIAL = baseCalculatedFare + 15; 
+  const FARE_ARKILA_PER_HOUR = 150;
+  const MAX_PASSENGERS = 7;
+  const MAX_HOURS = 8;
+  const REGULAR_PER_PASSENGER = true;
+  const SPECIAL_PER_PASSENGER = true;
+
+  let selectedType = 'Regular';
+  let tripMode = 'point_to_point';
+  let hours = 1;
+  let pax = 1;
+
+  const presetType = urlParams.get('type');
+  const presetPax = parseInt(urlParams.get('pax'), 10);
+  const presetMode = urlParams.get('mode');
+  const presetHours = parseInt(urlParams.get('hours'), 10);
+
+  const $ = id => document.getElementById(id);
+  const cards = document.querySelectorAll('.ride-option-card');
+
+  function regularFare() {
+    return FARE_REGULAR * (REGULAR_PER_PASSENGER ? pax : 1);
+  }
+
+  function specialFare() {
+    const base = tripMode === 'hourly' ? FARE_ARKILA_PER_HOUR * hours : FARE_SPECIAL;
+    return base * (SPECIAL_PER_PASSENGER ? pax : 1);
+  }
+
+  function currentFare() {
+    return selectedType === 'Special' ? specialFare() : regularFare();
+  }
+
+  function refresh() {
+    $('arkila-panel').classList.toggle('show', selectedType === 'Special');
+    $('hours-row').style.display = tripMode === 'hourly' ? 'flex' : 'none';
+    document.querySelectorAll('#mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.mode === tripMode));
+    $('hours-val').textContent = hours;
+    $('pax-val').textContent = pax;
+    $('arkila-note').textContent = tripMode === 'hourly'
+      ? `Hourly arkila: the tricycle is yours for ${hours} hour${hours > 1 ? 's' : ''}. Stops and waiting are allowed; agree on the route with your driver.`
+      : 'Special trip: the tricycle goes only to your pickup and destination, with no other passengers.';
+    $('fare-regular').textContent = `₱ ${regularFare()}.00`;
+    $('fare-regular-label').textContent = (REGULAR_PER_PASSENGER && pax > 1)
+      ? `${pax} pax × ₱${FARE_REGULAR}` : 'Base fare';
+
+    $('fare-special').textContent = `₱ ${specialFare()}.00`;
+    const perPax = SPECIAL_PER_PASSENGER && pax > 1 ? `${pax} pax × ` : '';
+    const unit = tripMode === 'hourly' ? `${hours} hr × ₱${FARE_ARKILA_PER_HOUR}` : `₱${FARE_SPECIAL}`;
+    $('fare-special-label').textContent = (tripMode === 'hourly' || perPax) ? perPax + unit : 'Base fare';
+    $('confirm-ride-btn').textContent = `Confirm Ride \u2022 \u20b1${currentFare()}.00`;
+  }
+
+  function selectType(type) {
+    selectedType = type;
+    cards.forEach(c => c.classList.toggle('selected', c.dataset.type === type));
+    refresh();
+  }
+
+  cards.forEach(card => card.addEventListener('click', () => selectType(card.dataset.type)));
+  document.querySelectorAll('#mode-seg button').forEach(b =>
+    b.addEventListener('click', () => { tripMode = b.dataset.mode; refresh(); }));
+  $('hours-minus').addEventListener('click', () => { hours = Math.max(1, hours - 1); refresh(); });
+  $('hours-plus').addEventListener('click', () => { hours = Math.min(MAX_HOURS, hours + 1); refresh(); });
+  $('pax-minus').addEventListener('click', () => { pax = Math.max(1, pax - 1); refresh(); });
+  $('pax-plus').addEventListener('click', () => { pax = Math.min(MAX_PASSENGERS, pax + 1); refresh(); });
+
+  if (presetMode === 'hourly') tripMode = 'hourly';
+  if (presetHours >= 1 && presetHours <= MAX_HOURS) hours = presetHours;
+  if (presetPax >= 1 && presetPax <= MAX_PASSENGERS) pax = presetPax;
+  selectType(presetType === 'Special' ? 'Special' : 'Regular');
+
+  $('confirm-ride-btn').addEventListener('click', async function() {
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) {
+      window.location.href = "login.html";
+      return;
+    }
+
+    const row = {
+      passenger_id: user.id,
+      pickup: pickup,
+      destination: destination,
+      pickup_lat: pickupLat,
+      pickup_lng: pickupLng,
+      destination_lat: hasDestCoords ? destLat : null,
+      destination_lng: hasDestCoords ? destLng : null,
+      ride_type: selectedType,
+      fare: currentFare(),
+      status: 'searching',
+      passenger_count: pax,
+      trip_mode: selectedType === 'Special' ? tripMode : 'shared',
+      hire_hours: selectedType === 'Special' && tripMode === 'hourly' ? hours : null
+    };
+
+    const doInsert = x => _supabase.from('rides').insert([x]).select();
+    const insertRide = async r => {
+      let res = await TriUtil.writeWithFallback(doInsert, r, ['destination_lat', 'destination_lng']);
+      if (res.error) {
+        res = await TriUtil.writeWithFallback(doInsert, r,
+          ['destination_lat', 'destination_lng', 'passenger_count', 'trip_mode', 'hire_hours']);
+      }
+      if (res.error) {
+        const core = { passenger_id: r.passenger_id, pickup: r.pickup, destination: r.destination,
+          pickup_lat: r.pickup_lat, pickup_lng: r.pickup_lng, ride_type: r.ride_type,
+          fare: r.fare, status: r.status };
+        res = await doInsert(core);
+      }
+      return res;
+    };
+    let { data, error } = await insertRide(row);
+
+    if (error) {
+      alert("Failed to create ride request: " + error.message);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      window.location.href = `searching.html?ride_id=${data[0].id}`;
+    }
+  });
+</script>
+</body>
+</html>

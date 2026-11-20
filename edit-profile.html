@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Edit Profile</title>
+  <link rel="stylesheet" href="style.css">
+  <style>html, body { overflow-y: auto; height: auto; min-height: 100%; }</style>
+</head>
+<body>
+  <div class="register-box" style="max-width: 450px; margin: 30px auto; padding: 20px;">
+    <h1 class="title" style="font-size: 20px;">Edit Profile</h1>
+
+    <label class="label" for="update-name">Full Name</label>
+    <input type="text" id="update-name" class="input1" required>
+
+    <label class="label" for="update-phone">Phone Number</label>
+    <input type="tel" id="update-phone" class="input1" placeholder="e.g. 09123456789">
+
+    <label class="label" for="avatar-file">Profile Picture</label>
+    <input type="file" id="avatar-file" class="input1" accept="image/*" style="padding: 8px;">
+
+    <!-- Driver-specific Tricycle Photo Section -->
+    <div id="driver-tricycle-section" style="display: none; margin-top: 10px;">
+      <label class="label" for="tricycle-file">Tricycle Picture</label>
+      <input type="file" id="tricycle-file" class="input1" accept="image/*" style="padding: 8px;">
+
+      <h3 style="font-size: 14px; color: #214329; margin: 18px 0 4px;">Vehicle &amp; Documents</h3>
+      <p class="fine-print" style="margin-bottom: 6px;">Passengers see your plate, body number and permit number so they know they are riding with a registered driver.</p>
+
+      <label class="label" for="update-permit">Operator's Permit No. (MTOP / Franchise)</label>
+      <input type="text" id="update-permit" class="input1">
+
+      <label class="label" for="update-body">Body Number</label>
+      <input type="text" id="update-body" class="input1">
+
+      <label class="label" for="update-plate">Plate No.</label>
+      <input type="text" id="update-plate" class="input1" style="text-transform: uppercase;">
+
+      <label class="label" for="update-rehistro">Rehistro No. (LTO OR/CR)</label>
+      <input type="text" id="update-rehistro" class="input1">
+
+      <label class="label" for="permit-file">Operator's Permit Photo</label>
+      <input type="file" id="permit-file" class="input1" accept="image/*" style="padding: 8px;">
+      <img id="permit-preview" class="doc-thumb" alt="Operator's permit" style="display:none;">
+
+      <label class="label" for="rehistro-file">Rehistro (OR/CR) Photo</label>
+      <input type="file" id="rehistro-file" class="input1" accept="image/*" style="padding: 8px;">
+      <img id="rehistro-preview" class="doc-thumb" alt="Rehistro" style="display:none;">
+    </div>
+
+    <a href="notifications.html" class="switch-link" style="display:block; text-align:center; margin-top: 14px; text-decoration:none;">Notification &amp; sound settings</a>
+
+    <button type="button" id="save-profile-btn" class="button1" style="margin-top: 15px;">Save Changes</button>
+    <a href="home.html?view=profile" class="switch-link" id="back-link" style="display: block; text-align: center; margin-top: 10px; text-decoration: none;">Back</a>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script src="notify.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const { data: { user } } = await _supabase.auth.getUser();
+      if (user) {
+        const role = user.user_metadata?.role || localStorage.getItem('user_role') || 'passenger';
+        if (role === 'driver') {
+          document.getElementById('driver-tricycle-section').style.display = 'block';
+          document.getElementById('back-link').href = 'driver-dashboard.html?view=profile';
+        }
+
+        const { data: profile } = await _supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        document.getElementById('update-name').value = profile?.fullname || user.user_metadata?.fullname || '';
+        document.getElementById('update-phone').value = profile?.phone || user.user_metadata?.phone || '';
+
+        if (role === 'driver') {
+          const meta = user.user_metadata || {};
+          const pick = (...v) => v.find(x => x && String(x).trim() !== '') || '';
+          document.getElementById('update-permit').value = pick(profile?.operator_permit_no, profile?.franchise_no, meta.operator_permit_no, meta.franchise_no);
+          document.getElementById('update-body').value = pick(profile?.body_no, meta.body_no);
+          document.getElementById('update-plate').value = pick(profile?.plate_no, meta.plate_no);
+          document.getElementById('update-rehistro').value = pick(profile?.rehistro_no, meta.rehistro_no);
+          [['permit-preview', profile?.operator_permit_url], ['rehistro-preview', profile?.rehistro_url]].forEach(([id, url]) => {
+            if (url) { const el = document.getElementById(id); el.src = url; el.style.display = 'block'; }
+          });
+        }
+      }
+    });
+
+    // Storage keys must be plain ASCII: spaces, brackets or emoji in a phone's file name make the upload fail.
+    function safeName(name) {
+      const dot = name.lastIndexOf('.');
+      const ext = dot > -1 ? name.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6) : '';
+      return Math.random().toString(36).slice(2, 8) + (ext ? '.' + ext : '');
+    }
+
+    // Saves the profile row. Works whether or not the row exists yet, and if the database is missing an
+    // optional column (migration not run yet) it drops just that column and retries instead of failing.
+    async function saveProfileRow(userId, payload) {
+      let row = Object.assign({}, payload);
+      for (let attempt = 0; attempt < 12; attempt++) {
+        let res = await _supabase.from('profiles').update(row).eq('id', userId).select('id');
+        if (!res.error && (!res.data || res.data.length === 0)) {
+          res = await _supabase.from('profiles').insert(Object.assign({ id: userId }, row)).select('id');
+        }
+        if (!res.error) return { error: null, dropped: Object.keys(payload).filter(k => !(k in row)) };
+
+        const m = /'([A-Za-z0-9_]+)' column/i.exec(res.error.message || '') ||
+                  /column "?([A-Za-z0-9_]+)"? (of relation|does not exist)/i.exec(res.error.message || '');
+        if (m && m[1] in row && m[1] !== 'fullname' && m[1] !== 'phone') {
+          delete row[m[1]];
+          continue;
+        }
+        return { error: res.error, dropped: [] };
+      }
+      return { error: { message: 'Too many missing columns.' }, dropped: [] };
+    }
+
+    document.getElementById('save-profile-btn').addEventListener('click', async function () {
+      const btn = this;
+      const idleLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      const fail = (msg) => { alert(msg); btn.disabled = false; btn.textContent = idleLabel; };
+
+      try {
+        const fullName = document.getElementById('update-name').value.trim();
+        const phone = document.getElementById('update-phone').value.trim();
+        const avatarFile = document.getElementById('avatar-file').files[0];
+        const tricycleFile = document.getElementById('tricycle-file')?.files[0];
+
+        if (!fullName) { fail('Please enter your full name.'); return; }
+
+        const { data: { user } } = await _supabase.auth.getUser();
+        if (!user) { fail('You must be logged in.'); return; }
+
+        const { data: existingProfile } = await _supabase
+          .from('profiles').select('*').eq('id', user.id).maybeSingle();
+
+        // Keep the existing role. (It used to default to "passenger" when the account metadata had no role.)
+        const role = existingProfile?.role || user.user_metadata?.role || localStorage.getItem('user_role') || 'passenger';
+
+        let avatarUrl = existingProfile?.avatar_url || user.user_metadata?.avatar_url || null;
+        let tricycleUrl = existingProfile?.tricycle_url || user.user_metadata?.tricycle_url || null;
+
+        const upload = async (file, prefix) => {
+          const path = `${user.id}/${prefix}_${Date.now()}_${safeName(file.name)}`;
+          const { error } = await _supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || undefined });
+          if (error) throw new Error(error.message);
+          return _supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+        };
+
+        try {
+          if (avatarFile) avatarUrl = await upload(avatarFile, 'avatar');
+          if (tricycleFile) tricycleUrl = await upload(tricycleFile, 'tricycle');
+        } catch (upErr) {
+          fail('Error uploading photo: ' + upErr.message);
+          return;
+        }
+
+        let driverExtra = {};
+        if (role === 'driver') {
+          try {
+            const permitFile = document.getElementById('permit-file')?.files[0];
+            const rehistroFile = document.getElementById('rehistro-file')?.files[0];
+            driverExtra = {
+              operator_permit_no: document.getElementById('update-permit').value.trim(),
+              body_no: document.getElementById('update-body').value.trim(),
+              plate_no: document.getElementById('update-plate').value.trim().toUpperCase(),
+              rehistro_no: document.getElementById('update-rehistro').value.trim(),
+              operator_permit_url: permitFile ? await upload(permitFile, 'permit') : (existingProfile?.operator_permit_url || null),
+              rehistro_url: rehistroFile ? await upload(rehistroFile, 'rehistro') : (existingProfile?.rehistro_url || null)
+            };
+          } catch (docErr) {
+            fail('Error uploading document photo: ' + docErr.message);
+            return;
+          }
+        }
+
+        // Profiles table is the source of truth, so save it first and report any problem.
+        const { error: profileError, dropped } = await saveProfileRow(user.id, Object.assign({
+          fullname: fullName,
+          phone: phone,
+          avatar_url: avatarUrl,
+          tricycle_url: tricycleUrl,
+          role: role
+        }, driverExtra));
+
+        if (profileError) {
+          fail('Failed to update profile: ' + profileError.message);
+          return;
+        }
+
+        // Keep the login account's metadata in sync. This is secondary, so a failure here must not block the save.
+        try {
+          const { error: metaError } = await _supabase.auth.updateUser({
+            data: Object.assign(
+              { fullname: fullName, phone: phone, avatar_url: avatarUrl, tricycle_url: tricycleUrl, role: role },
+              role === 'driver' ? Object.assign({}, driverExtra, { franchise_no: driverExtra.operator_permit_no }) : {}
+            )
+          });
+          if (metaError) console.warn('Account metadata not synced:', metaError.message);
+        } catch (metaErr) {
+          console.warn('Account metadata not synced:', metaErr);
+        }
+
+        const driverFieldsLost = role === 'driver' && dropped.some(k => /permit|body_no|plate|rehistro/.test(k));
+        alert(driverFieldsLost
+          ? 'Profile saved, but vehicle details could not be stored yet. Run supabase/migration-features.sql in your Supabase SQL editor.'
+          : 'Profile updated successfully!');
+        window.location.href = role === 'driver' ? 'driver-dashboard.html?view=profile' : 'home.html?view=profile';
+      } catch (err) {
+        console.error(err);
+        fail('Something went wrong while saving: ' + (err && err.message ? err.message : err));
+      }
+    });
+  </script>
+</body>
+</html>

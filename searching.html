@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Searching</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .search-wrapper {
+      padding: 40px 24px 32px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+      height: 100vh;
+      width: 100vw;
+      text-align: center;
+      background-color: #ffffff;
+      box-sizing: border-box;
+    }
+    .pulse-container {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .pulse-ring {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border: 2px solid #214329;
+      border-radius: 50%;
+      animation: pulse 2s infinite ease-out;
+      opacity: 0;
+    }
+    .pulse-ring:nth-child(2) { animation-delay: 0.6s; }
+    .pulse-ring:nth-child(3) { animation-delay: 1.2s; }
+    
+    .center-avatar {
+      width: 80px;
+      height: 80px;
+      background-color: #f4f7f5;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 5;
+      border: 3px solid #214329;
+    }
+    .center-avatar img {
+      width: 50px;
+    }
+    .info-block h3 {
+      font-size: 18px;
+      color: #1d1d1f;
+      margin-bottom: 6px;
+    }
+    .info-block p {
+      font-size: 12px;
+      color: #666;
+    }
+    /* style.css gives .btn-outline cream text for the dark welcome page; on this white page it was invisible */
+    .cancel-request-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 360px;
+      background: #ffffff;
+      color: #c62828;
+      border: 2px solid #c62828;
+      border-radius: 16px;
+      min-height: 54px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .cancel-request-btn:active { background: #fdecea; }
+    .cancel-request-btn:disabled { opacity: .6; }
+    @keyframes pulse {
+      0% { transform: scale(0.4); opacity: 0; }
+      50% { opacity: 0.4; }
+      100% { transform: scale(1.1); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="search-wrapper">
+    <div class="pulse-container">
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+      <div class="center-avatar">
+        <img src="logo2.png" alt="Trike">
+      </div>
+    </div>
+
+    <div class="info-block">
+      <h3 id="search-title">Finding you a tricycle...</h3>
+      <p id="search-sub">Searching nearby drivers.<br>This may just take a few seconds.</p>
+      <div id="fallback-box" style="display:none; margin-top:14px;">
+        <button type="button" id="any-driver-btn" class="hist-btn primary" style="width:100%;">Find any available driver</button>
+      </div>
+    </div>
+
+    <button type="button" id="cancel-request-btn" class="cancel-request-btn">Cancel Request</button>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="notify.js"></script>
+<script>
+  // Get ride_id from URL parameters instead of localStorage
+  const urlParams = new URLSearchParams(window.location.search);
+  const rideId = urlParams.get('ride_id');
+
+  // Rebook with the same driver: the ride is reserved for preferred_driver_id until the
+  // passenger chooses to open it to anyone (or the driver declines).
+  const WAIT_FOR_DRIVER_MS = 45000;
+  const startedAt = Date.now();
+  let waitingForName = null;      // set when the ride is reserved for a specific driver
+  let fallbackShown = false;
+
+  function waitingFor(name) {
+    waitingForName = name || 'your driver';
+    document.getElementById('search-title').textContent = `Waiting for ${waitingForName}...`;
+    document.getElementById('search-sub').innerHTML =
+      `We sent your request to ${TriUtil.esc(waitingForName)}.<br>You can switch to any available driver if they don't respond.`;
+  }
+
+  function showFallback(declined) {
+    if (fallbackShown) return;
+    fallbackShown = true;
+    if (declined) {
+      document.getElementById('search-title').textContent = `${waitingForName} can't take this ride`;
+      document.getElementById('search-sub').textContent = 'Want us to find another available driver?';
+    } else {
+      document.getElementById('search-sub').innerHTML =
+        `${TriUtil.esc(waitingForName)} hasn't responded yet.<br>Keep waiting, or find any available driver.`;
+    }
+    document.getElementById('fallback-box').style.display = 'block';
+  }
+
+  document.getElementById('any-driver-btn').addEventListener('click', async function () {
+    this.disabled = true;
+    // Only release the ride if nobody has claimed it in the meantime.
+    const { data: released, error } = await _supabase.from('rides')
+      .update({ preferred_driver_id: null, preferred_driver_name: null, status: 'searching' })
+      .eq('id', rideId).is('driver_id', null).select();
+    if (error || !released || released.length === 0) { this.disabled = false; return; }
+    waitingForName = null;
+    document.getElementById('fallback-box').style.display = 'none';
+    document.getElementById('search-title').textContent = 'Finding you a tricycle...';
+    document.getElementById('search-sub').innerHTML = 'Searching nearby drivers.<br>This may just take a few seconds.';
+  });
+
+  // Poll Supabase to check if a driver accepted the ride
+  const checkInterval = setInterval(async () => {
+    if (!rideId) return;
+    const { data, error } = await _supabase
+      .from('rides')
+      .select('*')
+      .eq('id', rideId)
+      .single();
+
+    if (data && data.preferred_driver_id && data.status !== 'accepted') {
+      if (!waitingForName) waitingFor(data.preferred_driver_name);
+      if (data.status === 'declined') showFallback(true);
+      else if (Date.now() - startedAt > WAIT_FOR_DRIVER_MS) showFallback(false);
+    }
+
+    if (data && data.status === 'accepted') {
+      clearInterval(checkInterval);
+      TriNotify.notify({ title: 'Driver found!', body: 'A tricycle driver accepted your ride.', sound: 'accepted' });
+      setTimeout(() => { window.location.href = `passenger-pickup.html?ride_id=${rideId}`; }, 1200);
+    }
+  }, 2500);
+
+  document.getElementById('cancel-request-btn').addEventListener('click', async function () {
+    if (!confirm('Cancel this ride request?')) return;
+    this.disabled = true;
+    this.textContent = 'Cancelling...';
+    clearInterval(checkInterval);
+    if (rideId) {
+      // Only cancel while no driver has claimed it; otherwise carry on to the pickup screen.
+      const { data: cancelled } = await _supabase.from('rides')
+        .update({ status: 'cancelled' }).eq('id', rideId).is('driver_id', null).select();
+      if (!cancelled || cancelled.length === 0) {
+        const { data: ride } = await _supabase.from('rides').select('status').eq('id', rideId).maybeSingle();
+        if (ride && ride.status === 'accepted') {
+          window.location.href = `passenger-pickup.html?ride_id=${rideId}`;
+          return;
+        }
+      }
+    }
+    window.location.href = 'home.html';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Messages</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #ffffff;
+    }
+    .chat-container { 
+      display: flex; 
+      flex-direction: column; 
+      width: 100vw; 
+      height: 100vh; 
+      margin: 0; 
+      background: #fff; 
+      box-sizing: border-box; 
+    }
+    .chat-header { 
+      display: flex; 
+      align-items: center; 
+      padding: 16px; 
+      border-bottom: 1px solid #eee; 
+      background: #214329; 
+      color: white; 
+    }
+    .chat-header a { 
+      color: white; 
+      text-decoration: none; 
+      font-size: 20px; 
+      margin-right: 16px; 
+    }
+    .call-btn {
+      margin-left: auto;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      background: #ffffff;
+      color: #214329;
+      border: none;
+      border-radius: 20px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .chat-header a.call-btn { color: #214329; margin-right: 0; font-size: 14px; }
+    .call-btn svg { width: 20px; height: 20px; fill: #214329; flex-shrink: 0; }
+    .chat-messages { 
+      flex: 1; 
+      padding: 16px; 
+      overflow-y: auto; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: flex-start; 
+      gap: 10px; 
+      background: #f9f9f9; 
+    }
+    .chat-input-area { 
+      display: flex; 
+      padding: 12px; 
+      border-top: 1px solid #eee; 
+      background: #fff; 
+      gap: 8px; 
+    }
+    .chat-input-area input { 
+      flex: 1; 
+      padding: 10px 14px; 
+      border: 1px solid #ddd; 
+      border-radius: 20px; 
+      outline: none; 
+      font-size: 14px; 
+    }
+    .chat-input-area button { 
+      background: #214329; 
+      color: white; 
+      border: none; 
+      padding: 10px 20px; 
+      border-radius: 20px; 
+      font-weight: bold; 
+      cursor: pointer; 
+    }
+    .thread-list { 
+      padding: 16px; 
+      overflow-y: auto; 
+      flex: 1; 
+    }
+    .thread-item { 
+      padding: 12px 16px; 
+      border-bottom: 1px solid #eee; 
+      cursor: pointer; 
+      display: flex; 
+      align-items: center; 
+      gap: 12px; 
+    }
+    .thread-item:hover { 
+      background: #f1f1f1; 
+    }
+    .thread-avatar {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      background-color: #ccc;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: #555;
+      flex-shrink: 0;
+    }
+    .message-wrapper {
+      display: flex;
+      flex-direction: column;
+      max-width: 75%;
+    }
+    .message-wrapper.sent {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+    .message-wrapper.received {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+    .message-bubble { 
+      padding: 10px 14px; 
+      border-radius: 18px; 
+      font-size: 14px; 
+      line-height: 1.4; 
+      word-break: break-word; 
+      overflow-wrap: break-word;
+      max-width: 100%; 
+    }
+    .message-bubble.sent { 
+      background: #214329; 
+      color: white; 
+      border-bottom-right-radius: 4px; 
+    }
+    .message-bubble.received { 
+      background: #e4e6eb; 
+      color: #050505; 
+      border-bottom-left-radius: 4px; 
+    }
+    .message-timestamp {
+      font-size: 10px;
+      color: #8c939d;
+      margin-top: 2px;
+      padding: 0 4px;
+    }
+    .message-wrapper.sent .message-timestamp {
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="chat-header">
+      <a href="#" id="back-btn">←</a>
+      <h2 id="header-title" style="font-size: 18px; margin:0;">Messages</h2>
+      <a href="#" id="call-btn" class="call-btn" aria-label="Call">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.6a1 1 0 0 1-.25 1z"/></svg>
+        <span id="call-label">Call</span>
+      </a>
+    </div>
+
+    <!-- Conversations / Thread List View -->
+    <div id="thread-view" class="thread-list">
+      <p style="color: #666; text-align: center; margin-top: 20px;">Loading chats...</p>
+    </div>
+
+    <!-- Active Chat Conversation View (Hidden Initially) -->
+    <div id="chat-view" style="display: none; flex-direction: column; flex: 1; overflow: hidden;">
+      <div id="message-list" class="chat-messages"></div>
+      <div class="chat-input-area">
+        <input type="text" id="message-input" placeholder="Type a message...">
+        <button type="button" id="send-btn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script src="notify.js"></script>
+  <script>
+    function getChatId(userIdA, userIdB) {
+      return [userIdA, userIdB].sort().join('_');
+    }
+
+    let currentUserId = null;
+    let userRole = 'passenger';
+    let currentChatId = null;
+    let currentOtherUserId = null;
+    let currentOtherPhone = '';
+    let currentOtherName = '';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const { data: { user } } = await _supabase.auth.getUser();
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      currentUserId = user.id;
+      userRole = user.user_metadata?.role || 'passenger';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const chatIdParam = urlParams.get('chat_id');
+      const userParam = urlParams.get('user');
+      const rideIdParam = urlParams.get('ride_id');
+      const returnUrl = urlParams.get('return');
+
+      if (chatIdParam && userParam) {
+        openChatRow(chatIdParam, userParam);
+      } else if (rideIdParam) {
+        const { data: rideData } = await _supabase
+          .from('rides')
+          .select('passenger_id, driver_id')
+          .eq('id', rideIdParam)
+          .single();
+
+        if (rideData) {
+          const otherId = userRole === 'driver' ? rideData.passenger_id : rideData.driver_id;
+          const cId = getChatId(rideData.passenger_id, rideData.driver_id);
+          window.history.replaceState({}, '', `messages.html?chat_id=${cId}&user=${otherId}`);
+          openChatRow(cId, otherId);
+        } else {
+          loadThreads();
+        }
+      } else {
+        loadThreads();
+      }
+
+      document.getElementById('back-btn').addEventListener('click', (e) => {
+        e.preventDefault();
+        
+        if (returnUrl) {
+          window.location.href = decodeURIComponent(returnUrl);
+          return;
+        }
+
+        if (currentChatId) {
+          currentChatId = null;
+          currentOtherUserId = null;
+          window.history.pushState({}, '', 'messages.html');
+          document.getElementById('chat-view').style.display = 'none';
+          document.getElementById('thread-view').style.display = 'block';
+          document.getElementById('header-title').textContent = 'Messages';
+          document.getElementById('call-btn').style.display = 'none';
+          currentOtherPhone = '';
+          loadThreads();
+        } else {
+          window.location.href = userRole === 'driver' ? 'driver-dashboard.html?view=profile' : 'home.html?view=profile';
+        }
+      });
+
+      document.getElementById('call-btn').addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!currentOtherPhone) {
+          alert((currentOtherName || 'This person') + ' has no phone number saved, so they can\'t be called yet.');
+          return;
+        }
+        window.location.href = 'tel:' + currentOtherPhone;
+      });
+
+      document.getElementById('send-btn').addEventListener('click', sendMessage);
+      document.getElementById('message-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+      });
+    });
+
+    async function loadThreads() {
+      const threadView = document.getElementById('thread-view');
+      threadView.innerHTML = `<p style="color: #666; text-align: center; margin-top: 40px;">Loading chats...</p>`;
+      
+      let query = _supabase
+        .from('rides')
+        .select('id, passenger_id, driver_id, status, created_at');
+
+      if (userRole === 'driver') {
+        query = query.eq('driver_id', currentUserId);
+      } else {
+        query = query.eq('passenger_id', currentUserId);
+      }
+
+      const { data: rides, error } = await query.order('created_at', { ascending: false });
+
+      if (error || !rides || rides.length === 0) {
+        threadView.innerHTML = `<p style="color: #666; text-align: center; margin-top: 40px;">No prior conversations found.</p>`;
+        return;
+      }
+
+      const uniqueThreadsMap = new Map();
+
+      for (const ride of rides) {
+        const otherUserId = userRole === 'driver' ? ride.passenger_id : ride.driver_id;
+        if (!otherUserId) continue;
+
+        const chatId = getChatId(currentUserId, otherUserId);
+
+        if (!uniqueThreadsMap.has(otherUserId)) {
+          uniqueThreadsMap.set(otherUserId, {
+            chatId: chatId,
+            otherUserId: otherUserId,
+            created_at: ride.created_at
+          });
+        }
+      }
+
+      const validThreads = [];
+
+      for (const [otherUserId, thread] of uniqueThreadsMap.entries()) {
+        let hasConvo = false;
+
+        const { count: chatMsgCount } = await _supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('chat_id', thread.chatId);
+
+        if (chatMsgCount && chatMsgCount > 0) {
+          hasConvo = true;
+        } else {
+          const { data: sharedRides } = await _supabase
+            .from('rides')
+            .select('id')
+            .or(`and(passenger_id.eq.${currentUserId},driver_id.eq.${otherUserId}),and(passenger_id.eq.${otherUserId},driver_id.eq.${currentUserId})`);
+
+          const rideIds = (sharedRides || []).map(r => r.id);
+          if (rideIds.length > 0) {
+            const { count: rideMsgCount } = await _supabase
+              .from('messages')
+              .select('*', { count: 'exact', head: true })
+              .in('ride_id', rideIds);
+
+            if (rideMsgCount && rideMsgCount > 0) {
+              hasConvo = true;
+            }
+          }
+        }
+
+        if (hasConvo) {
+          validThreads.push({ otherUserId, thread });
+        }
+      }
+
+      if (validThreads.length === 0) {
+        threadView.innerHTML = `<p style="color: #666; text-align: center; margin-top: 40px;">No prior conversations found.</p>`;
+        return;
+      }
+
+      threadView.innerHTML = '';
+
+      for (const { otherUserId, thread } of validThreads) {
+        const { data: profileData } = await _supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', otherUserId)
+          .maybeSingle();
+
+        let displayName = userRole === 'driver' ? (profileData?.fullname || profileData?.full_name || 'Passenger') : (profileData?.fullname || profileData?.full_name || 'Driver');
+        let avatarUrl = profileData?.avatar_url || profileData?.avatar || null;
+
+        const item = document.createElement('div');
+        item.className = 'thread-item';
+        
+        const avatarHtml = avatarUrl 
+          ? `<div class="thread-avatar"><img src="${avatarUrl}" alt="" style="width:100%; height:100%; object-fit:cover;"></div>` 
+          : `<div class="thread-avatar">${displayName.charAt(0).toUpperCase()}</div>`;
+
+        item.innerHTML = `
+          ${avatarHtml}
+          <div style="flex: 1;">
+            <strong style="font-size: 14px; color: #1d1d1f; display: block;">${displayName}</strong>
+          </div>
+          <span style="color: #214329; font-weight: bold; font-size: 14px;">Chat ❯</span>
+        `;
+        
+        item.addEventListener('click', () => {
+          window.history.pushState({}, '', `messages.html?chat_id=${thread.chatId}&user=${otherUserId}`);
+          openChatRow(thread.chatId, otherUserId);
+        });
+        threadView.appendChild(item);
+      }
+    }
+
+    async function openChatRow(chatId, otherUserId) {
+      currentChatId = chatId;
+      currentOtherUserId = otherUserId;
+      document.getElementById('thread-view').style.display = 'none';
+      document.getElementById('chat-view').style.display = 'flex';
+      document.getElementById('header-title').textContent = 'Messages';
+      currentOtherPhone = '';
+      currentOtherName = '';
+      document.getElementById('call-btn').style.display = 'inline-flex';
+      loadOtherContact(otherUserId, chatId);
+
+      await loadMessages(chatId, otherUserId);
+
+      _supabase.getChannels().forEach(c => _supabase.removeChannel(c));
+
+      _supabase
+        .channel(`chat_${chatId}`)
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages' 
+        }, payload => {
+          const m = payload.new || {};
+          if (m.chat_id === chatId && m.sender_id !== currentUserId) {
+            TriSound.play('message');
+            TriNotify.vibrate([120]);
+            appendMessageBubble(m);
+          }
+        })
+        .subscribe();
+    }
+
+    async function loadOtherContact(otherUserId, chatId) {
+      try {
+        const { data: p } = await _supabase.from('profiles').select('*').eq('id', otherUserId).maybeSingle();
+        let phone = p?.phone || '';
+        if (!phone && userRole !== 'driver') {
+          const { data: r } = await _supabase.from('rides').select('driver_phone')
+            .eq('driver_id', otherUserId).eq('passenger_id', currentUserId)
+            .order('created_at', { ascending: false }).limit(1);
+          phone = (r && r[0] && r[0].driver_phone) || '';
+        }
+        if (currentChatId !== chatId) return;
+        currentOtherName = p?.fullname || p?.full_name || '';
+        currentOtherPhone = String(phone).replace(/[^\d+]/g, '');
+        if (currentOtherName) document.getElementById('header-title').textContent = currentOtherName;
+      } catch (e) { console.warn('Could not load contact:', e); }
+    }
+
+    async function loadMessages(chatId, otherUserId) {
+      const messageList = document.getElementById('message-list');
+      if (!messageList) return;
+      
+      messageList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px; width: 100%;">Loading history...</div>';
+
+      let allMessages = [];
+
+      if (chatId) {
+        const { data: chatMsgs } = await _supabase
+          .from('messages')
+          .select('*')
+          .eq('chat_id', chatId);
+        
+        if (chatMsgs) allMessages.push(...chatMsgs);
+      }
+
+      if (allMessages.length === 0 && otherUserId) {
+        const { data: sharedRides } = await _supabase
+          .from('rides')
+          .select('id')
+          .or(`and(passenger_id.eq.${currentUserId},driver_id.eq.${otherUserId}),and(passenger_id.eq.${otherUserId},driver_id.eq.${currentUserId})`);
+
+        const rideIds = (sharedRides || []).map(r => r.id);
+
+        if (rideIds.length > 0) {
+          const { data: rideMsgs } = await _supabase
+            .from('messages')
+            .select('*')
+            .in('ride_id', rideIds);
+          
+          if (rideMsgs) allMessages.push(...rideMsgs);
+        }
+      }
+
+      const uniqueMap = new Map();
+      allMessages.forEach(msg => uniqueMap.set(msg.id, msg));
+      const sortedMessages = Array.from(uniqueMap.values()).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+      messageList.innerHTML = '';
+      if (sortedMessages.length === 0) {
+        messageList.innerHTML = `<p style="color: #666; text-align: center; margin-top: 20px; width: 100%;">No messages found in this chat yet.</p>`;
+        return;
+      }
+
+      sortedMessages.forEach(msg => appendMessageBubble(msg));
+    }
+
+    function appendMessageBubble(msg) {
+      const messageList = document.getElementById('message-list');
+      if (!messageList) return;
+      
+      const isSent = msg.sender_id === currentUserId;
+      
+      let timeString = '';
+      if (msg.created_at) {
+        const date = new Date(msg.created_at);
+        timeString = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.className = `message-wrapper ${isSent ? 'sent' : 'received'}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = `message-bubble ${isSent ? 'sent' : 'received'}`;
+      bubble.textContent = msg.message;
+
+      const timestamp = document.createElement('div');
+      timestamp.className = 'message-timestamp';
+      timestamp.textContent = timeString;
+
+      wrapper.appendChild(bubble);
+      wrapper.appendChild(timestamp);
+      messageList.appendChild(wrapper);
+      messageList.scrollTop = messageList.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (!text || !currentChatId) return;
+
+      const { data, error } = await _supabase.from('messages').insert([{
+        chat_id: currentChatId,
+        sender_id: currentUserId,
+        message: text
+      }]).select();
+
+      if (error) {
+        alert("Failed to send message: " + error.message);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        appendMessageBubble(data[0]);
+      }
+
+      input.value = '';
+    }
+  </script>
+</body>
+</html>

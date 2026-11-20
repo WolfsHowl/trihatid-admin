@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Notifications &amp; Sound</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="sub-page">
+    <div class="sub-head">
+      <a href="#" id="back-btn" aria-label="Back">←</a>
+      <h2>Notifications &amp; Sound</h2>
+    </div>
+
+    <div class="sub-stack">
+      <div class="setting-row">
+        <div>
+          <b>SMS notifications</b>
+          <small id="sms-note">Get a text when your driver accepts, is arriving, starts and finishes your trip.</small>
+        </div>
+        <label class="switch"><input type="checkbox" id="opt-sms" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <b>Sound</b>
+          <small>Play a tone for new ride requests, driver found, arrival, new messages and trip completed.</small>
+        </div>
+        <label class="switch"><input type="checkbox" id="opt-sound" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <b>Vibration</b>
+          <small>Vibrate with each alert (on phones that support it).</small>
+        </div>
+        <label class="switch"><input type="checkbox" id="opt-vibrate" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <b>Phone notifications</b>
+          <small id="sys-note">Show alerts while the app is in the background.</small>
+        </div>
+        <button type="button" class="hist-btn" id="sys-btn" style="flex: 0 0 auto; padding: 9px 12px;">Allow</button>
+      </div>
+
+      <button type="button" class="button1" id="test-btn" style="border:none; width:100%; cursor:pointer; margin-top: 6px;">Test sound &amp; alert</button>
+      <p class="fine-print" id="phone-note" style="text-align:center;"></p>
+      <p class="fine-print" style="text-align:center;">SMS messages are sent to the mobile number saved in <a href="edit-profile.html" style="color:#214329; font-weight:700;">Edit Profile</a>. Standard SMS rates from your carrier may apply when you reply.</p>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="notify.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    const $ = id => document.getElementById(id);
+
+    $('back-btn').addEventListener('click', e => {
+      e.preventDefault();
+      if (document.referrer) window.history.back();
+      else window.location.href = localStorage.getItem('user_role') === 'driver' ? 'driver-dashboard.html?view=profile' : 'home.html?view=profile';
+    });
+
+    $('opt-sound').checked = TriPrefs.get('sound');
+    $('opt-vibrate').checked = TriPrefs.get('vibrate');
+    $('opt-sound').addEventListener('change', e => { TriPrefs.set('sound', e.target.checked); if (e.target.checked) TriSound.play('accepted', true); });
+    $('opt-vibrate').addEventListener('change', e => { TriPrefs.set('vibrate', e.target.checked); if (e.target.checked) TriNotify.vibrate(); });
+
+    // System (phone) notification permission
+    function refreshSys() {
+      if (!('Notification' in window)) { $('sys-btn').style.display = 'none'; $('sys-note').textContent = 'Not supported on this device.'; return; }
+      if (Notification.permission === 'granted') { $('sys-btn').style.display = 'none'; $('sys-note').textContent = 'Enabled.'; }
+      else if (Notification.permission === 'denied') { $('sys-btn').style.display = 'none'; $('sys-note').textContent = 'Blocked. Turn it on in your device or browser settings.'; }
+    }
+    refreshSys();
+    $('sys-btn').addEventListener('click', async () => { await TriNotify.requestSystemPermission(); refreshSys(); });
+
+    $('test-btn').addEventListener('click', () => {
+      TriNotify.notify({ title: 'TriHatid test', body: 'Sound and alerts are working.', sound: 'accepted' });
+    });
+
+    // SMS preference lives on the profile so the server can respect it.
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return;
+    const { data: profile } = await _supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    const smsOn = profile && profile.notify_sms === false ? false : true;
+    $('opt-sms').checked = smsOn;
+    const phone = profile?.phone || user.user_metadata?.phone;
+    $('phone-note').textContent = phone ? `SMS number: ${phone}` : 'No mobile number saved yet. Add one in Edit Profile to receive SMS.';
+
+    $('opt-sms').addEventListener('change', async e => {
+      const { error } = await _supabase.from('profiles').upsert({ id: user.id, notify_sms: e.target.checked });
+      if (error) {
+        e.target.checked = !e.target.checked;
+        alert('Could not save SMS setting: ' + error.message);
+      } else {
+        TriPrefs.set('sms', e.target.checked);
+      }
+    });
+  });
+</script>
+</body>
+</html>

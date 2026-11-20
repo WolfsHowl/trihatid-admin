@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Passenger Pickup</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .tracking-card {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 88%;
+      max-width: 400px;
+      background-color: #ffffff;
+      padding: 18px 16px;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 72vh;
+      overflow-y: auto;
+    }
+    .status-badge {
+      background-color: #214329;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      align-self: center;
+    }
+    .action-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .btn-secondary-action {
+      flex: 1;
+      padding: 10px;
+      background-color: #f0f0f0;
+      color: #333;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map" style="width: 100vw; height: 100vh; position: absolute; top: 0; left: 0;"></div>
+
+  <div class="tracking-card">
+    <div id="status-badge" class="status-badge">Driver is on the way to you</div>
+    
+    <div id="driver-details" class="drv-details" style="border-top: 1px solid #eee; padding-top: 12px;">
+      <span style="font-size: 12px; color: #666;">Loading driver details...</span>
+    </div>
+    <a href="#" id="driver-profile-link" class="fine-print" style="color:#214329; font-weight:700; text-decoration:none; text-align:center; display:none;">View full driver profile &rsaquo;</a>
+
+    <div class="action-row">
+      <a href="#" id="chat-btn" class="btn-secondary-action">Chat</a>
+    </div>
+  </div>
+
+  <!-- Shown right after the driver accepts the booking -->
+  <div id="arriving-overlay" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">Driver on the way</div>
+      <div class="modal-body">The Driver is arriving to your location shortly</div>
+      <div class="modal-actions">
+        <button type="button" id="arriving-ok" class="modal-btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script src="notify.js"></script>
+  <script src="driver-info.js"></script>
+  <script>
+    (function () {
+      let map = null;
+      let driverMarker = null;
+      let remainingRouteLine = null;
+      let traveledRouteLine = null;
+      const pinColor = "#2e7d32";
+
+      document.addEventListener("DOMContentLoaded", async function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        const rideId = urlParams.get('ride_id');
+
+        if (!rideId) {
+          alert("No active ride specified.");
+          window.location.href = "home.html";
+          return;
+        }
+
+        const chatBtn = document.getElementById('chat-btn');
+        if (chatBtn && rideId) {
+          const currentUrl = encodeURIComponent(window.location.pathname + window.location.search);
+          chatBtn.href = `messages.html?ride_id=${rideId}&return=${currentUrl}`;
+        }
+
+        const { data: ride, error: rideError } = await _supabase
+          .from('rides')
+          .select('*')
+          .eq('id', rideId)
+          .single();
+
+        if (rideError || !ride) {
+          alert("Ride not found.");
+          window.location.href = "home.html";
+          return;
+        }
+
+        window._ride = ride;
+
+        // Pop-up after the driver accepts the booking (once per ride)
+        if (ride.driver_id && TriUtil.once('tri_accept_popup_' + ride.id)) {
+          document.getElementById('arriving-overlay').classList.add('active');
+        }
+        document.getElementById('arriving-ok').addEventListener('click', () => {
+          document.getElementById('arriving-overlay').classList.remove('active');
+        });
+
+        // Fetch stored driver welcome greeting with fail-safe database insertion & real-time chat listener
+        const { data: { user } } = await _supabase.auth.getUser();
+        if (user && window._ride && window._ride.driver_id) {
+          const chatId = [user.id, window._ride.driver_id].sort().join('_');
+          
+          const { data: initialMsgs } = await _supabase
+            .from('messages')
+            .select('*')
+            .eq('chat_id', chatId)
+            .order('created_at', { ascending: true });
+
+          // Only show a popup for the greeting sent for THIS ride (after it was accepted),
+          // never an older message from a previous chat with the same driver.
+          let greetingMessage = "";
+          const greetText = TriChat.driverGreetingText((window._ride.driver_name || '').trim() || null);
+          const since = new Date(window._ride.created_at || 0).getTime();
+          const recent = (initialMsgs || []).filter(m =>
+            m.sender_id === window._ride.driver_id &&
+            m.message && m.message.indexOf("Trihatid Driver") !== -1 &&
+            new Date(m.created_at).getTime() >= since);
+          if (recent.length) {
+            greetingMessage = recent[recent.length - 1].message;
+          } else {
+            console.warn('No driver greeting saved for this ride. Check the messages table policies / run the greeting trigger SQL.');
+          }
+
+          if (greetingMessage && TriUtil.once('tri_greeting_' + window._ride.id)) {
+            if (typeof TriSound !== 'undefined') TriSound.play('message');
+            if (typeof TriNotify !== 'undefined') {
+              TriNotify.notify({
+                title: 'Message from driver',
+                body: greetingMessage,
+                sound: 'message',
+                autoClose: false,
+                sticky: true
+              });
+            }
+          }
+
+          _supabase.channel('passenger_chat_listener_' + window._ride.id)
+            .on('postgres_changes', { 
+              event: 'INSERT', 
+              schema: 'public', 
+              table: 'messages', 
+              filter: `chat_id=eq.${chatId}` 
+            }, (payload) => {
+              const newMessage = payload.new;
+              if (newMessage && newMessage.sender_id !== user.id) {
+                if (TriUtil.once('tri_live_msg_' + newMessage.id)) {
+                  if (typeof TriSound !== 'undefined') TriSound.play('message');
+                  if (typeof TriNotify !== 'undefined') {
+                    TriNotify.notify({
+                      title: 'Message from driver',
+                      body: newMessage.message,
+                      sound: 'message',
+                      autoClose: false,
+                      sticky: true
+                    });
+                  }
+                }
+              }
+            })
+            .subscribe();
+        }
+
+        const initialLat = ride.pickup_lat || 11.7068;
+        const initialLng = ride.pickup_lng || 122.3656;
+
+        map = L.map('map', { zoomControl: false }).setView([initialLat, initialLng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        setTimeout(() => map.invalidateSize(), 300);
+
+        if (ride.pickup_lat && ride.pickup_lng) {
+          const createPin = () => L.divIcon({
+            className: 'custom-pin',
+            html: `<div style="background-color: ${pinColor}; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+
+          L.marker([ride.pickup_lat, ride.pickup_lng], { icon: createPin() }).addTo(map).bindPopup('Passenger Pickup').openPopup();
+        }
+
+        if (ride.driver_id) {
+          const details = await TriDriver.getDetails(ride.driver_id, ride);
+          TriDriver.render(document.getElementById('driver-details'), details);
+          const profileLink = document.getElementById('driver-profile-link');
+          profileLink.style.display = 'block';
+          profileLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            const currentUrl = encodeURIComponent(window.location.pathname + window.location.search);
+            window.location.href = `profile.html?id=${ride.driver_id}&return=${currentUrl}`;
+          });
+          TriNotify.notify({
+            title: 'Driver on the way',
+            body: `${details.name}${details.plate ? ' \u2022 ' + details.plate.toUpperCase() : ''}`,
+            sound: 'accepted'
+          });
+        } else {
+          document.getElementById('driver-details').textContent = 'Waiting for driver details...';
+        }
+
+        const checkInterval = setInterval(async () => {
+          const { data: updatedRide } = await _supabase
+            .from('rides')
+            .select('*')
+            .eq('id', rideId)
+            .single();
+
+          if (updatedRide) {
+            if (updatedRide.status === 'ongoing') {
+              clearInterval(checkInterval);
+              TriNotify.notify({ title: 'Trip started', body: 'Enjoy your ride!', sound: 'accepted' });
+              setTimeout(() => { window.location.href = `on-trip.html?ride_id=${rideId}`; }, 900);
+              return;
+            }
+
+            if (updatedRide.driver_lat && updatedRide.driver_lng && 
+                updatedRide.driver_lat !== 0 && updatedRide.driver_lng !== 0 && 
+                ride.pickup_lat && ride.pickup_lng) {
+                
+              const driverCoords = [updatedRide.driver_lat, updatedRide.driver_lng];
+              const pickupCoords = [ride.pickup_lat, ride.pickup_lng];
+              if (TriUtil.distanceMeters(driverCoords[0], driverCoords[1], pickupCoords[0], pickupCoords[1]) <= 150
+                  && TriUtil.once('tri_arriving_' + rideId)) {
+                document.getElementById('status-badge').textContent = 'Your driver is arriving!';
+                TriNotify.notify({ title: 'Your driver is arriving', body: 'Please get ready at your pickup point.', sound: 'arriving' });
+              }
+
+              if (!driverMarker) {
+                driverMarker = L.marker(driverCoords, { 
+                  icon: L.divIcon({
+                    className: 'custom-pin',
+                    html: `<div style="background-color: #214329; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                  }) 
+                }).addTo(map).bindPopup('Driver Location');
+              } else {
+                driverMarker.setLatLng(driverCoords);
+              }
+
+              try {
+                const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${updatedRide.driver_lng},${updatedRide.driver_lat};${pickupCoords[1]},${pickupCoords[0]}?overview=full&geometries=geojson`);
+                const data = await response.json();
+                
+                if (data.routes && data.routes.length > 0) {
+                  const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                  
+                  let closestIndex = 0;
+                  let minDistance = Infinity;
+                  
+                  coords.forEach((coord, index) => {
+                    const dist = Math.hypot(coord[0] - updatedRide.driver_lat, coord[1] - updatedRide.driver_lng);
+                    if (dist < minDistance) {
+                      minDistance = dist;
+                      closestIndex = index;
+                    }
+                  });
+
+                  const traveledCoords = coords.slice(0, closestIndex + 1);
+                  const remainingCoords = coords.slice(closestIndex);
+
+                  if (traveledRouteLine) {
+                    traveledRouteLine.setLatLngs(traveledCoords);
+                  } else if (traveledCoords.length > 1) {
+                    traveledRouteLine = L.polyline(traveledCoords, { color: '#214329', weight: 5, opacity: 0.85 }).addTo(map);
+                  }
+
+                  if (remainingRouteLine) {
+                    remainingRouteLine.setLatLngs(remainingCoords);
+                  } else if (remainingCoords.length > 1) {
+                    remainingRouteLine = L.polyline(remainingCoords, { color: '#9e9e9e', weight: 5, opacity: 0.85, dashArray: '6, 6' }).addTo(map);
+                  }
+                }
+              } catch (e) {
+                console.error("OSRM road routing error:", e);
+              }
+            }
+          }
+        }, 3000);
+      });
+    })();
+  </script>
+</body>
+</html>

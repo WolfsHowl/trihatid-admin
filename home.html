@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriHatid - Home</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+  <div class="home-wrapper">
+    <!-- HOME MAP VIEW -->
+    <div id="view-home" class="view-content active">
+      <div class="map-container">
+        <div id="map"></div>
+      </div>
+
+      <div class="home-greet"><b id="greet-name">Hi there</b><span>Where in Aklan are you headed?</span></div>
+      <script>try{var n=(localStorage.getItem("user_name")||"").split(" ")[0];if(n)document.getElementById("greet-name").textContent="Hi, "+n;}catch(e){}</script>
+      <!-- Passenger Booking Dashboard Overlay -->
+      <div id="passenger-dashboard-card" class="booking-card">
+        <h2 class="card-title" id="booking-title">Where to?</h2>
+        <p id="click-status" class="status-hint">Click map or type location in Aklan.</p>
+        
+        <form class="search-container" onsubmit="event.preventDefault(); searchLocation(document.getElementById('pickup-input').value, 'pickup');" style="margin-bottom: 2px;">
+          <input type="text" id="pickup-input" placeholder="Enter pickup location..." class="input1" autocomplete="off">
+        </form>
+
+        <form class="search-container" onsubmit="event.preventDefault(); searchLocation(document.getElementById('destination-input').value, 'destination');" style="margin-bottom: 2px;">
+          <input type="text" id="destination-input" placeholder="Enter destination location..." class="input1" autocomplete="off">
+        </form>
+
+        <button type="button" id="gps-btn" class="gps-button">Use My Current Location</button>
+        
+        <a href="ride-options.html" class="button1" id="book-btn">Request TriHatid</a>
+      </div>
+    </div>
+
+    <!-- ACTIVITY HISTORY -->
+<div id="view-history" class="view-content">
+  <div class="panel-view">
+    <h2 class="panel-title">Activity History</h2>
+    <div id="passenger-history-list" style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="background: #fff; padding: 14px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+        <div style="font-weight: 700;">Loading history...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <!-- FEEDBACK -->
+    <div id="view-feedback" class="view-content">
+      <div class="panel-view">
+        <h2 class="panel-title">Feedback</h2>
+        <p class="fb-note">Rate your driver after each ride. Drivers can see your rating and comment.</p>
+        <div id="passenger-feedback-list" style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="fb-empty">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCOUNT -->
+    <div id="view-profile" class="view-content">
+      <div class="panel-view">
+        <h2 class="panel-title">Account</h2>
+        
+        <div class="profile-header">
+          <div class="profile-avatar">J</div>
+          <div>
+            <h3 style="margin: 0; font-size: 16px; color: #1d1d1f;">Juan Dela Cruz</h3>
+            <p id="profile-role-label" style="margin: 2px 0 0 0; font-size: 12px; color: #666; font-weight: 700; text-transform: capitalize;">Passenger</p>
+          </div>
+        </div>
+
+<div class="profile-menu-item" onclick="window.location.href='edit-profile.html';">
+          <span>Edit Profile</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="window.location.href='messages.html';">
+          <span>Messages</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="window.location.href='notifications.html';">
+          <span>Notifications &amp; Sound</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="window.location.href='feedback.html';">
+          <span>Send Feedback</span>
+          <span style="color: #ccc;">❯</span>
+        </div>
+
+        <div class="profile-menu-item" onclick="handleLogout()" style="color: #c62828;">
+          <span>Log Out</span>
+          <span>❯</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM NAVIGATION BAR -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" id="nav-home" onclick="switchView('home')">
+        <div class="nav-icon icon-home"></div>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" id="nav-history" onclick="switchView('history')">
+        <div class="nav-icon icon-history"></div>
+        <span>History</span>
+      </button>
+      <button class="nav-item" id="nav-feedback" onclick="switchView('feedback')">
+        <div class="nav-icon icon-feedback"></div>
+        <span>Feedback</span>
+      </button>
+      <button class="nav-item" id="nav-profile" onclick="switchView('profile')">
+        <div class="nav-icon icon-profile"></div>
+        <span>Account</span>
+      </button>
+    </nav>
+  </div> 
+
+  <!-- IN-APP LOCATION PERMISSION -->
+  <div id="locationModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">Allow Location Access?</div>
+      <div class="modal-body">
+        TriHatid collects location data to enable snapping points and tracking features even when the app window is minimized.
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="modal-deny" class="modal-btn btn-secondary">Don't Allow</button>
+        <button type="button" id="modal-allow" class="modal-btn btn-primary">Allow Access</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- 1. Load supabase library and bridge first -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="notify.js"></script>
+<script src="script.js"></script>
+<script>
+  // Newest first. Ride ids may be UUIDs (not time-ordered), so sort by created_at and only
+  // fall back to id if that column is unavailable.
+  async function fetchMyRides(userId, completedOnly) {
+    const build = orderCol => {
+      let q = _supabase.from('rides').select('*').eq('passenger_id', userId);
+      if (completedOnly) q = q.eq('status', 'completed');
+      return q.order(orderCol, { ascending: false });
+    };
+    let res = await build('created_at');
+    if (res.error) res = await build('id');
+    return res;
+  }
+
+  const STATUS_LABEL = {
+    searching: 'Looking for a driver',
+    accepted: 'Driver on the way',
+    ongoing: 'Trip in progress',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    declined: 'Declined'
+  };
+  const STATUS_PAGE = {
+    searching: 'searching.html',
+    accepted: 'passenger-pickup.html',
+    ongoing: 'on-trip.html'
+  };
+
+  // Load passenger history dynamically. Every booking shows up here, including a rebooked
+  // trip the moment it is requested; it is marked Completed once the ride is finished.
+  async function loadPassengerHistory() {
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: rides, error } = await fetchMyRides(user.id, false);
+
+    const historyContainer = document.getElementById('passenger-history-list');
+    if (!historyContainer) return;
+
+    if (error || !rides || rides.length === 0) {
+      historyContainer.innerHTML = `<div style="background: #fff; padding: 14px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); font-weight: 700;">No trips yet</div>`;
+      return;
+    }
+
+    window._historyRides = rides;
+    historyContainer.innerHTML = rides.map((ride, i) => {
+      const esc = TriUtil.esc;
+      const isSpecial = ride.ride_type === 'Special';
+      const typeLabel = isSpecial
+        ? (ride.trip_mode === 'hourly' ? `Special (Arkila · ${esc(ride.hire_hours || 1)} hr)` : 'Special (Arkila)')
+        : esc(ride.ride_type || 'Regular');
+      const status = ride.status || 'completed';
+      const statusLabel = STATUS_LABEL[status] || esc(status);
+      const driverLine = ride.driver_name
+        ? `<div class="hist-meta">Driver: ${esc(ride.driver_name)}${ride.driver_plate ? ' • ' + esc(ride.driver_plate) : ''}</div>`
+        : '';
+      const ratingLine = ride.rating
+        ? `<div class="hist-stars">${'★'.repeat(ride.rating)}${'☆'.repeat(5 - ride.rating)}</div>` : '';
+      const openBtn = STATUS_PAGE[status]
+        ? `<button type="button" class="hist-btn" onclick="window.location.href='${STATUS_PAGE[status]}?ride_id=${encodeURIComponent(ride.id)}'">View trip</button>` : '';
+      const rateBtn = (status === 'completed' && !ride.rating)
+        ? `<button type="button" class="hist-btn" onclick="rateTrip('${esc(ride.id)}')">Rate</button>` : '';
+      return `
+      <div class="hist-card">
+        <div class="hist-route">${esc(ride.pickup)} ➔ ${esc(ride.destination)}</div>
+        <div class="hist-meta">${statusLabel} • ${typeLabel}</div>
+        ${driverLine}
+        ${ratingLine}
+        <div class="hist-fare">PHP ${esc(ride.fare)}.00</div>
+        <div class="hist-actions">
+          ${openBtn}${rateBtn}
+          <button type="button" class="hist-btn primary" onclick="rebook(${i})">${ride.driver_id ? 'Rebook this driver →' : 'Rebook →'}</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Feedback tab: completed trips, with the passenger's feedback for each driver
+  async function loadPassengerFeedback() {
+    const box = document.getElementById('passenger-feedback-list');
+    if (!box) return;
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: rides, error } = await fetchMyRides(user.id, true);
+
+    if (error || !rides || rides.length === 0) {
+      box.innerHTML = '<div class="fb-empty">No completed rides yet.<br>After a ride you can give feedback to your driver here.</div>';
+      return;
+    }
+
+    const esc = TriUtil.esc;
+    const BAD = ['Unsafe driving', 'Rude', 'Late', 'Dirty tricycle', 'Took a long route', 'Overcharged'];
+    box.innerHTML = rides.map(ride => {
+      const driver = ride.driver_name || 'Tricycle Driver';
+      const date = ride.created_at ? new Date(ride.created_at).toLocaleDateString() : '';
+      const tags = (ride.rating_tags || '').split(',').map(t => t.trim()).filter(Boolean);
+      const body = ride.rating
+        ? `<div class="fb-stars">${'\u2605'.repeat(ride.rating)}${'\u2606'.repeat(5 - ride.rating)}</div>
+           ${tags.length ? `<div class="fb-tags">${tags.map(t => `<span class="${BAD.includes(t) ? 'bad' : ''}">${esc(t)}</span>`).join('')}</div>` : ''}
+           ${ride.feedback ? `<div class="fb-comment">${esc(ride.feedback)}</div>` : ''}`
+        : `<div class="hist-actions"><button type="button" class="hist-btn primary" onclick="giveFeedback('${esc(ride.id)}')">Give feedback</button></div>`;
+      return `
+      <div class="fb-card">
+        <div class="fb-top">
+          <div class="fb-who">${esc(driver)}</div>
+          <div class="fb-date">${esc(date)}</div>
+        </div>
+        <div class="fb-route">${esc(ride.pickup)} \u2794 ${esc(ride.destination)}</div>
+        ${body}
+      </div>`;
+    }).join('');
+  }
+
+  function giveFeedback(rideId) {
+    window.location.href = `rating.html?ride_id=${encodeURIComponent(rideId)}&from=feedback`;
+  }
+
+  // Rebook: reopen ride options with the same pickup, destination and ride type (any available driver).
+  function rebook(index) {
+    const ride = (window._historyRides || [])[index];
+    if (!ride) return;
+    const params = new URLSearchParams({
+      pickup: ride.pickup || '',
+      destination: ride.destination || ''
+    });
+    if (ride.pickup_lat != null && ride.pickup_lng != null) {
+      params.set('plat', ride.pickup_lat);
+      params.set('plng', ride.pickup_lng);
+    }
+    if (ride.destination_lat != null && ride.destination_lng != null) {
+      params.set('lat', ride.destination_lat);
+      params.set('lng', ride.destination_lng);
+    }
+    if (ride.ride_type) params.set('type', ride.ride_type);
+    if (ride.passenger_count) params.set('pax', ride.passenger_count);
+    if (ride.trip_mode === 'hourly') {
+      params.set('mode', 'hourly');
+      if (ride.hire_hours) params.set('hours', ride.hire_hours);
+    }
+    window.location.href = `ride-options.html?${params.toString()}`;
+  }
+
+  function rateTrip(rideId) {
+    window.location.href = `rating.html?ride_id=${encodeURIComponent(rideId)}&from=history`;
+  }
+
+  // Dynamic Profile & Security Guard
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Fetch live session user details from Supabase to update Account tab
+   const { data: { session } } = await _supabase.auth.getSession();
+   const user = session?.user;
+    if (!user) { window.location.replace('login.html'); return; }
+
+    // Role comes from the account itself (localStorage can be cleared by the OS while idle)
+    if (TriAuth.roleOf(user) === 'driver') {
+      window.location.href = 'driver-dashboard.html';
+      return;
+    }
+    if (user) {
+      const { data: profile } = await _supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const fullName = profile?.fullname || user.user_metadata?.fullname || 'User';
+      const phone = profile?.phone || user.user_metadata?.phone || '';
+      const avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url;
+
+      const profileNameEl = document.querySelector('#view-profile h3');
+      if (profileNameEl) profileNameEl.textContent = fullName;
+
+      // Optional: display phone in account view if an element with id 'profile-phone' exists
+      const phoneEl = document.getElementById('profile-phone');
+      if (phoneEl) phoneEl.textContent = phone ? `Phone: ${phone}` : '';
+
+      const avatarEl = document.querySelector('.profile-avatar');
+      if (avatarEl) {
+        if (avatarUrl) {
+          avatarEl.innerHTML = `<img src="${avatarUrl}" alt="Profile" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        } else if (fullName) {
+          avatarEl.textContent = fullName.charAt(0).toUpperCase();
+        }
+      }
+    }
+
+    loadPassengerHistory();
+    loadPassengerFeedback();
+  });
+
+  const bookBtn = document.getElementById('book-btn');
+  if (bookBtn) {
+    bookBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const pickup = document.getElementById('pickup-input').value || 'Brgy. Poblacion, Kalibo';
+      const destination = document.getElementById('destination-input').value || 'Dumaguit Port';
+      
+      // Use the actual road-snapped coordinates from script.js
+      const pLat = (typeof pickupCoords !== 'undefined' && pickupCoords) ? pickupCoords[0] : 11.5833;
+      const pLng = (typeof pickupCoords !== 'undefined' && pickupCoords) ? pickupCoords[1] : 122.4833;
+      const hasDest = (typeof destinationCoords !== 'undefined' && destinationCoords);
+
+      const params = new URLSearchParams({
+        pickup: pickup,
+        destination: destination,
+        plat: pLat,
+        plng: pLng
+      });
+      if (hasDest) {
+        params.set('lat', destinationCoords[0]);
+        params.set('lng', destinationCoords[1]);
+      }
+
+      window.location.href = `ride-options.html?${params.toString()}`;
+    });
+  }
+
+  window.addEventListener('pageshow', e => { if (e.persisted) { loadPassengerHistory(); loadPassengerFeedback(); } });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { loadPassengerHistory(); loadPassengerFeedback(); }
+  });
+
+  async function handleLogout() {
+    await _supabase.auth.signOut();
+    localStorage.clear();
+    window.location.href = 'welcome.html';
+  }
+</script>
+</body>
+</html>
