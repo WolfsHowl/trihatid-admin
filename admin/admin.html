@@ -1,0 +1,1858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TriHatid - Admin Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <style>
+    :root {
+      --green: #214329;
+      --green-2: #2f5a38;
+      --green-tint: #e6efe8;
+      --sun: #f2b632;
+      --sun-soft: #fff1c7;
+      --paper: #fffdf0;
+      --canvas: #f1f5f2;
+      --ink: #17231a;
+      --muted: #5f6e63;
+      --line: #dde5df;
+      --white: #ffffff;
+      --danger: #b91c1c;
+      --danger-soft: #fef2f2;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+      --blue: #1d4ed8;
+      --blue-soft: #eff6ff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--canvas);
+      color: var(--ink);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* TOASTS */
+    #toast-container {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast-item {
+      background: var(--green);
+      color: var(--white);
+      border-left: 4px solid var(--sun);
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 10px 24px rgba(23, 35, 26, 0.2);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 380px;
+      pointer-events: auto;
+      transition: opacity 0.25s ease;
+    }
+
+    .toast-item.amber {
+      background: var(--amber);
+      border-left-color: var(--sun-soft);
+    }
+
+    .toast-item.red {
+      background: var(--danger);
+      border-left-color: #fecaca;
+    }
+
+    /* PORTAL SHELL */
+    .portal-shell {
+      min-height: 100vh;
+      display: flex;
+    }
+
+    .sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 30;
+    }
+
+    .sidebar {
+      width: 260px;
+      background: var(--green);
+      color: var(--white);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      flex-shrink: 0;
+      z-index: 40;
+    }
+
+    .sidebar-head {
+      padding: 22px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-brand h1 {
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .sidebar-brand span {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #a7f3d0;
+    }
+
+    .drawer-close-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .nav-section {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .nav-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--white);
+    }
+
+    .nav-btn.active {
+      background: var(--green-2);
+      color: var(--white);
+      font-weight: 700;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pill-badge {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .pill-red {
+      background: #dc2626;
+      color: var(--white);
+    }
+
+    .pill-amber {
+      background: var(--sun);
+      color: var(--ink);
+    }
+
+    .sidebar-foot {
+      padding: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .admin-card {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .admin-meta {
+      min-width: 0;
+    }
+
+    .admin-meta p {
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .admin-meta span {
+      display: block;
+      font-size: 11px;
+      color: #a7f3d0;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* MAIN AREA */
+    .main-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .top-bar {
+      background: var(--white);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .menu-toggle-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--ink);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 6px;
+    }
+
+    .page-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .logout-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--white);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .logout-btn:hover {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: #fecaca;
+    }
+
+    .view-section {
+      padding: 24px;
+      max-width: 1280px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* STATS & CARDS */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .stat-card.clickable {
+      cursor: pointer;
+    }
+
+    .stat-card.clickable:hover {
+      border-color: var(--green);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+
+    .stat-val {
+      font-size: 24px;
+      font-weight: 800;
+      margin-top: 4px;
+    }
+
+    .stat-val.amber { color: var(--amber); }
+    .stat-val.red { color: var(--danger); }
+    .stat-val.green { color: var(--green); }
+
+    .stat-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .stat-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      background: var(--green-tint);
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .stat-icon.amber { background: var(--amber-soft); color: var(--amber); }
+    .stat-icon.red { background: var(--danger-soft); color: var(--danger); }
+
+    .two-col-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    .panel-card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-head h3 {
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .link-btn {
+      background: none;
+      border: none;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .link-btn:hover {
+      text-decoration: underline;
+    }
+
+    .preview-row {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .preview-row:last-child {
+      border-bottom: none;
+    }
+
+    .row-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .row-info {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .mini-avatar {
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+      min-height: 36px;
+      border-radius: 50%;
+      background: var(--green-tint);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .mini-avatar.driver-avatar {
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      min-height: 48px;
+      background: var(--green);
+      color: var(--white);
+      border: 2px solid var(--green-tint);
+    }
+
+    .mini-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .row-title {
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .row-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    /* FILTER BAR */
+    .filter-bar {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .filter-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filter-pill {
+      padding: 8px 14px;
+      border-radius: 12px;
+      border: none;
+      background: var(--canvas);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .filter-pill.active {
+      background: var(--green);
+      color: var(--white);
+    }
+
+    /* REPORT CARDS */
+    .reports-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .report-card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--green);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .report-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .report-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .tag {
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      line-height: 1.2;
+    }
+
+    .tag.active { background: var(--green-tint); color: var(--green); }
+    .tag.suspended { background: var(--amber-soft); color: var(--amber); }
+    .tag.banned { background: var(--danger-soft); color: var(--danger); }
+    .tag.role { background: var(--blue-soft); color: var(--blue); }
+    .tag.pending { background: var(--sun-soft); color: var(--amber); }
+
+    .report-reason-box {
+      background: #f8faf9;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .report-reason-box b {
+      display: block;
+      font-size: 12px;
+      color: var(--danger);
+      margin-bottom: 4px;
+    }
+
+    .report-reason-box p {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .report-actions {
+      width: 195px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-left: 1px solid var(--line);
+      padding-left: 18px;
+    }
+
+    .act-btn {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      white-space: nowrap;
+      transition: background-color 0.15s ease, opacity 0.15s ease;
+    }
+
+    .act-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .act-outline {
+      background: var(--white);
+      border: 1px solid var(--line);
+      color: var(--ink);
+    }
+
+    .act-amber {
+      background: #d97706;
+      border: none;
+      color: var(--white);
+    }
+
+    .act-green {
+      background: var(--green);
+      border: none;
+      color: var(--white);
+    }
+
+    .act-red {
+      background: var(--danger);
+      border: none;
+      color: var(--white);
+    }
+
+    /* VERIFY CARDS */
+    .verify-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .verify-card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--green);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
+      min-width: 0;
+      box-shadow: 0 2px 10px rgba(23, 35, 26, 0.04);
+    }
+
+    .verify-card > div:first-child {
+      min-width: 0;
+    }
+
+    .verify-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+      min-width: 0;
+    }
+
+    .verify-badges {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .creds-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .cred-box {
+      background: #f8faf9;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      min-width: 0;
+    }
+
+    .cred-box span {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .cred-box b {
+      display: block;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--ink);
+      margin-top: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    .docs-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+
+    .docs-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .doc-btn {
+      padding: 10px 8px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--canvas);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-width: 0;
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .doc-btn i {
+      font-size: 14px;
+      color: var(--green);
+    }
+
+    .doc-svg {
+      width: 17px;
+      height: 17px;
+      color: var(--green);
+      flex-shrink: 0;
+    }
+
+    .doc-btn:hover {
+      background: var(--green-tint);
+      color: var(--green);
+      border-color: #b8cebe;
+    }
+
+    .verify-foot {
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .verify-foot .act-btn.primary-verify {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .verify-foot .act-btn.secondary-verify {
+      width: auto;
+      padding: 10px 16px;
+      flex-shrink: 0;
+    }
+
+    /* MODALS */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 480px;
+      background: var(--white);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+    }
+
+    .modal-head {
+      background: var(--green);
+      color: var(--white);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .modal-head.amber {
+      background: #d97706;
+    }
+
+    .modal-head button {
+      background: none;
+      border: none;
+      color: var(--white);
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .modal-body {
+      padding: 18px;
+    }
+
+    .modal-img {
+      width: 100%;
+      height: 240px;
+      object-fit: cover;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--canvas);
+    }
+
+    .modal-caption {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    .duration-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .duration-opt {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .duration-opt label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .modal-foot {
+      padding: 12px 18px;
+      background: #f8faf9;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .modal-btn {
+      padding: 9px 14px;
+      border-radius: 12px;
+      border: none;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    @media (max-width: 1023px) {
+      .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .drawer-close-btn,
+      .menu-toggle-btn {
+        display: inline-flex;
+      }
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .two-col-grid,
+      .verify-grid {
+        grid-template-columns: 1fr;
+      }
+      .report-card {
+        flex-direction: column;
+      }
+      .report-actions {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid var(--line);
+        padding-left: 0;
+        padding-top: 14px;
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+      .report-actions .act-btn {
+        flex: 1;
+        min-width: 130px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+      .verify-head {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .verify-badges {
+        align-items: flex-start;
+      }
+      .creds-grid {
+        grid-template-columns: 1fr;
+      }
+      .verify-foot {
+        flex-wrap: wrap;
+      }
+      .verify-foot .act-btn.secondary-verify {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toast Notification Banner -->
+  <div id="toast-container"></div>
+
+  <!-- ADMIN PORTAL APP -->
+  <div id="admin-portal-app">
+    <div id="sidebar-backdrop" onclick="toggleSidebar()" class="sidebar-backdrop hidden"></div>
+
+    <div class="portal-shell">
+      <!-- SIDEBAR NAVIGATION -->
+      <aside id="sidebar" class="sidebar">
+        <div>
+          <div class="sidebar-head">
+            <div class="sidebar-brand">
+              <h1>TriHatid</h1>
+              <span>Admin Portal • Aklan</span>
+            </div>
+            <button type="button" onclick="toggleSidebar()" class="drawer-close-btn" aria-label="Close menu">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <nav class="nav-section">
+            <button type="button" onclick="switchTab('home')" id="nav-home" class="nav-btn active">
+              <span class="nav-left">
+                <i class="fa-solid fa-house"></i>
+                <span>Home</span>
+              </span>
+            </button>
+
+            <button type="button" onclick="switchTab('reports')" id="nav-reports" class="nav-btn">
+              <span class="nav-left">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span>Reports</span>
+              </span>
+              <span id="badge-reports" class="pill-badge pill-red">0</span>
+            </button>
+
+            <button type="button" onclick="switchTab('verify')" id="nav-verify" class="nav-btn">
+              <span class="nav-left">
+                <i class="fa-solid fa-id-card-clip"></i>
+                <span>Driver Verification</span>
+              </span>
+              <span id="badge-verify" class="pill-badge pill-amber">0</span>
+            </button>
+          </nav>
+        </div>
+
+        <div class="sidebar-foot">
+          <div class="admin-card">
+            <div class="admin-meta">
+              <p>TriHatid Admin</p>
+              <span id="admin-footer-email">admin@trihatid.ph</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT AREA -->
+      <div class="main-col">
+        <header class="top-bar">
+          <div class="top-bar-left">
+            <button type="button" onclick="toggleSidebar()" class="menu-toggle-btn" aria-label="Open menu">
+              <i class="fa-solid fa-bars"></i>
+            </button>
+            <div>
+              <h2 id="page-title" class="page-title">Overview</h2>
+            </div>
+          </div>
+
+          <button type="button" onclick="handleAdminLogout()" class="logout-btn">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Log Out</span>
+          </button>
+        </header>
+
+        <!-- VIEW 1: HOME OVERVIEW -->
+        <main id="view-home" class="view-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div>
+                <p class="stat-label">Registered Users</p>
+                <p id="stat-total-users" class="stat-val">0</p>
+                <p id="stat-users-breakdown" class="stat-note">0 Passengers • 0 Drivers</p>
+              </div>
+              <div class="stat-icon"><i class="fa-solid fa-users"></i></div>
+            </div>
+
+            <div onclick="switchTab('verify')" class="stat-card clickable">
+              <div>
+                <p class="stat-label">Pending Drivers</p>
+                <p id="stat-pending-drivers" class="stat-val amber">0</p>
+                <p class="stat-note">Awaiting verification</p>
+              </div>
+              <div class="stat-icon amber"><i class="fa-solid fa-user-check"></i></div>
+            </div>
+
+            <div onclick="switchTab('reports')" class="stat-card clickable">
+              <div>
+                <p class="stat-label">Open Incident Reports</p>
+                <p id="stat-open-reports" class="stat-val red">0</p>
+                <p class="stat-note">Passengers &amp; drivers</p>
+              </div>
+              <div class="stat-icon red"><i class="fa-solid fa-shield-halved"></i></div>
+            </div>
+
+            <div class="stat-card">
+              <div>
+                <p class="stat-label">Active Trips Now</p>
+                <p id="stat-active-trips" class="stat-val green">0</p>
+                <p class="stat-note">Province of Aklan</p>
+              </div>
+              <div class="stat-icon"><i class="fa-solid fa-route"></i></div>
+            </div>
+          </div>
+
+          <div class="two-col-grid">
+            <div class="panel-card">
+              <div class="panel-head">
+                <h3>Pending Driver Applications</h3>
+                <button type="button" onclick="switchTab('verify')" class="link-btn">View All &rarr;</button>
+              </div>
+              <div id="home-verify-preview"></div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-head">
+                <h3>Latest Passenger &amp; Driver Reports</h3>
+                <button type="button" onclick="switchTab('reports')" class="link-btn">Manage Reports &rarr;</button>
+              </div>
+              <div id="home-reports-preview"></div>
+            </div>
+          </div>
+        </main>
+
+        <!-- VIEW 2: REPORTS MANAGEMENT (BOTH PASSENGERS & DRIVERS) -->
+        <main id="view-reports" class="view-section hidden">
+          <div class="filter-bar">
+            <div class="filter-pills">
+              <button type="button" onclick="filterReports('all')" id="rep-filter-all" class="rep-filter-btn filter-pill active">All Reports</button>
+              <button type="button" onclick="filterReports('driver')" id="rep-filter-driver" class="rep-filter-btn filter-pill">Reported Drivers</button>
+              <button type="button" onclick="filterReports('passenger')" id="rep-filter-passenger" class="rep-filter-btn filter-pill">Reported Passengers</button>
+            </div>
+          </div>
+
+          <div id="reports-list" class="reports-stack"></div>
+        </main>
+
+        <!-- VIEW 3: DRIVER VERIFICATION -->
+        <main id="view-verify" class="view-section hidden">
+          <div class="filter-bar">
+            <div class="filter-pills">
+              <button type="button" onclick="filterDrivers('pending')" id="drv-filter-pending" class="drv-filter-btn filter-pill active">Pending Drivers</button>
+              <button type="button" onclick="filterDrivers('approved')" id="drv-filter-approved" class="drv-filter-btn filter-pill">Approved Drivers</button>
+              <button type="button" onclick="filterDrivers('rejected')" id="drv-filter-rejected" class="drv-filter-btn filter-pill">Rejected Drivers</button>
+              <button type="button" onclick="filterDrivers('all')" id="drv-filter-all" class="drv-filter-btn filter-pill">All Drivers</button>
+            </div>
+          </div>
+
+          <div id="verify-list" class="verify-grid"></div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOCUMENT / EVIDENCE PREVIEW MODAL -->
+  <div id="preview-modal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span id="modal-doc-title">Document Preview</span>
+        <button type="button" onclick="closeModal()" aria-label="Close preview">&times;</button>
+      </div>
+      <div class="modal-body">
+        <img id="modal-doc-img" src="" alt="Document Preview" class="modal-img" />
+        <p id="modal-doc-caption" class="modal-caption"></p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" onclick="closeModal()" class="modal-btn act-outline">Close Preview</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUSPEND ACCOUNT DURATION MODAL -->
+  <div id="suspend-modal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-head amber">
+        <span><i class="fa-solid fa-user-clock"></i> Suspend Account</span>
+        <button type="button" onclick="closeSuspendModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 12px; color: var(--muted);">
+          Select how long <strong id="suspend-target-name" style="color: var(--ink);"></strong> will be restricted from logging into the TriHatid app:
+        </p>
+
+        <div class="duration-list">
+          <div class="duration-opt">
+            <label><input type="radio" name="suspend-days" value="1 Day" checked /> 1 Day (24 Hours)</label>
+            <span style="color: var(--muted);">Minor warning</span>
+          </div>
+          <div class="duration-opt">
+            <label><input type="radio" name="suspend-days" value="2 Days" /> 2 Days (48 Hours)</label>
+            <span style="color: var(--muted);">Short cooldown</span>
+          </div>
+          <div class="duration-opt">
+            <label><input type="radio" name="suspend-days" value="3 Days" /> 3 Days (72 Hours)</label>
+            <span style="color: var(--muted);">Standard penalty</span>
+          </div>
+          <div class="duration-opt">
+            <label><input type="radio" name="suspend-days" value="5 Days" /> 5 Days</label>
+            <span style="color: var(--muted);">Repeated offense</span>
+          </div>
+          <div class="duration-opt">
+            <label><input type="radio" name="suspend-days" value="7 Days (1 Week)" /> 7 Days (1 Week)</label>
+            <span style="color: var(--amber); font-weight: 700;">Maximum suspension</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" onclick="closeSuspendModal()" class="modal-btn act-outline">Cancel</button>
+        <button type="button" onclick="confirmSuspension()" class="modal-btn act-amber">Confirm Suspension</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let profilesMap = new Map();
+    let reportsData = [];
+    let driversData = [];
+    let liveStats = {
+      totalUsers: 0,
+      passengerCount: 0,
+      driverCount: 0,
+      activeTrips: 0
+    };
+
+    let currentReportFilter = 'all';
+    let currentDriverFilter = 'pending';
+    let pendingSuspendUserId = null;
+    let isSubmittingAction = false;
+    let loadAdminSeq = 0;
+
+    function isAllowedAdmin(user) {
+      const role = (user?.user_metadata?.role || user?.app_metadata?.role || '').toLowerCase();
+      return role === 'admin' || user?.email === 'admin@trihatid.ph';
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!window._supabase || !_supabase.auth) {
+        window.location.replace('admin-login.html');
+        return;
+      }
+
+      const { data: { session } } = await _supabase.auth.getSession();
+      if (!session?.user || !isAllowedAdmin(session.user)) {
+        await _supabase.auth.signOut();
+        window.location.replace('admin-login.html');
+        return;
+      }
+
+      document.getElementById('admin-footer-email').textContent = session.user.email || 'admin@trihatid.ph';
+      renderAll();
+      await loadAdminData();
+    });
+
+    async function handleAdminLogout() {
+      if (window._supabase && _supabase.auth) {
+        await _supabase.auth.signOut();
+      }
+      window.location.replace('admin-login.html');
+    }
+
+    function normalizeRole(roleVal) {
+      return String(roleVal || '').toLowerCase().trim() === 'passenger' ? 'passenger' : 'driver';
+    }
+
+    function normalizeAccountStatus(profile) {
+      const raw = String(profile?.account_status || '').toLowerCase().trim();
+      if (raw === 'banned' || profile?.is_banned === true) return 'banned';
+      if (raw === 'suspended') return 'suspended';
+      return 'active';
+    }
+
+    function resolveReportedUserId(report, rideMap, profileMap) {
+      const candidates = [
+        report.reported_user_id,
+        report.target_user_id,
+        report.offender_id
+      ];
+
+      for (const cand of candidates) {
+        if (cand && profileMap.has(cand)) return cand;
+      }
+
+      const ride = report.ride_id ? rideMap.get(report.ride_id) : null;
+      const reportedRoleHint = String(report.reported_role || report.target_role || '').toLowerCase().trim();
+
+      if (reportedRoleHint === 'passenger') {
+        if (report.passenger_id && profileMap.has(report.passenger_id)) return report.passenger_id;
+        if (ride?.passenger_id && profileMap.has(ride.passenger_id)) return ride.passenger_id;
+      }
+
+      if (reportedRoleHint === 'driver') {
+        if (report.driver_id && profileMap.has(report.driver_id)) return report.driver_id;
+        if (ride?.driver_id && profileMap.has(ride.driver_id)) return ride.driver_id;
+      }
+
+      return candOrFallback(candidates, ride, report);
+    }
+
+    function candOrFallback(candidates, ride, report) {
+      for (const c of candidates) {
+        if (c) return c;
+      }
+      if (ride?.driver_id) return ride.driver_id;
+      if (ride?.passenger_id) return ride.passenger_id;
+      return report.driver_id || report.passenger_id || null;
+    }
+
+    function resolveReporterName(report, rideMap, profileMap) {
+      const ride = report.ride_id ? rideMap.get(report.ride_id) : null;
+      const reporterId = report.reporter_id || report.passenger_id || ride?.passenger_id || null;
+      const reporter = reporterId ? profileMap.get(reporterId) : null;
+      return reporter?.fullname || reporter?.username || 'User';
+    }
+
+    function getDriverPhotoUrl(profile) {
+      const candidates = [
+        profile?.avatar_url,
+        profile?.photo_url,
+        profile?.profile_photo_url,
+        profile?.driver_photo_url,
+        profile?.selfie_url
+      ];
+      for (const url of candidates) {
+        if (typeof url === 'string' && url.trim().length > 0) {
+          return url.trim();
+        }
+      }
+      return '';
+    }
+
+    function renderAvatarContent(photoUrl, initials, altText) {
+      if (photoUrl) {
+        return `<img src="${escapeAttr(photoUrl)}" alt="${escapeAttr(altText)}" onerror="this.parentElement.textContent='${escapeAttr(initials)}';" />`;
+      }
+      return escapeHtml(initials);
+    }
+
+    async function loadAdminData() {
+      if (!window._supabase || !_supabase.auth) return;
+      const currentSeq = ++loadAdminSeq;
+
+      const [profilesRes, ridesRes, reportsRes] = await Promise.all([
+        _supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        _supabase.from('rides').select('*'),
+        _supabase.from('reports').select('*').order('created_at', { ascending: false })
+      ]);
+
+      if (profilesRes.error) {
+        showToast(`Profiles load error: ${profilesRes.error.message}`, 'red');
+      }
+      if (ridesRes.error) {
+        showToast(`Rides load error: ${ridesRes.error.message}`, 'red');
+      }
+      if (reportsRes.error) {
+        showToast(`Reports load error: ${reportsRes.error.message}`, 'red');
+      }
+
+      const profiles = profilesRes.data || [];
+      const rides = ridesRes.data || [];
+      const rawReports = reportsRes.data || [];
+
+      profilesMap = new Map(profiles.map(p => [p.id, p]));
+      const rideMap = new Map(rides.map(r => [r.id, r]));
+
+      const passengers = profiles.filter(p => String(p.role || '').toLowerCase() === 'passenger');
+      const drivers = profiles.filter(p => String(p.role || '').toLowerCase() === 'driver');
+      const activeStatuses = new Set(['accepted', 'arrived', 'in_transit', 'ongoing', 'active']);
+
+      liveStats = {
+        totalUsers: profiles.length,
+        passengerCount: passengers.length,
+        driverCount: drivers.length,
+        activeTrips: rides.filter(r => activeStatuses.has(String(r.status || '').toLowerCase())).length
+      };
+
+      driversData = drivers.map(d => {
+        const name = d.fullname || d.username || 'Unnamed Driver';
+        const initials = name.split(' ').filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join('') || 'DR';
+        const permitUrl = d.operator_permit_url || 'https://placehold.co/600x400/214329/ffffff?text=No+Permit+Uploaded';
+        const rehistroUrl = d.rehistro_url || 'https://placehold.co/600x400/1e3a8a/ffffff?text=No+OR%2FCR+Uploaded';
+        const tricycleUrl = d.tricycle_url || 'https://placehold.co/600x400/2e7d32/ffffff?text=No+Tricycle+Photo';
+
+        return {
+          id: d.id,
+          fullname: name,
+          photoUrl: getDriverPhotoUrl(d),
+          phone: d.phone || 'No phone',
+          appliedDate: d.created_at
+            ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : 'N/A',
+          bodyNo: d.body_no || 'N/A',
+          plateNo: d.plate_no || 'N/A',
+          permitNo: d.operator_permit_no || 'N/A',
+          rehistroNo: d.rehistro_no || 'N/A',
+          verificationStatus: (d.verification_status || 'pending').toLowerCase(),
+          accountStatus: normalizeAccountStatus(d),
+          suspendDuration: d.suspend_duration || '',
+          avatar: initials,
+          docs: {
+            permit: permitUrl,
+            rehistro: rehistroUrl,
+            tricycle: tricycleUrl
+          }
+        };
+      });
+
+      reportsData = rawReports.map((r, idx) => {
+        const ride = rideMap.get(r.ride_id);
+        const targetId = resolveReportedUserId(r, rideMap, profilesMap);
+        const reportedUser = targetId ? profilesMap.get(targetId) : null;
+
+        const reportedRole = reportedUser?.role
+          ? normalizeRole(reportedUser.role)
+          : (r.reported_role || r.target_role ? normalizeRole(r.reported_role || r.target_role) : 'driver');
+
+        const accountStatus = reportedUser
+          ? normalizeAccountStatus(reportedUser)
+          : (['banned', 'suspended'].includes(String(r.status || '').toLowerCase()) ? String(r.status).toLowerCase() : 'active');
+
+        const suspendDuration = reportedUser?.suspend_duration || '';
+
+        return {
+          id: r.id,
+          shortId: `REP-${String(r.id || idx + 1).slice(0, 6).toUpperCase()}`,
+          reportedUserId: targetId,
+          date: r.created_at
+            ? new Date(r.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+            : 'Recent',
+          reporterName: resolveReporterName(r, rideMap, profilesMap),
+          reportedName: reportedUser?.fullname || reportedUser?.username || (reportedRole === 'passenger' ? 'Reported Passenger' : 'Reported Driver'),
+          reportedRole,
+          route: ride ? `${ride.pickup || 'Pickup'} -> ${ride.destination || 'Destination'}` : 'Route unavailable',
+          reason: r.reason || 'Incident Report',
+          details: r.details || 'No additional details provided.',
+          evidenceUrl: r.media_url || 'https://placehold.co/600x400/214329/ffffff?text=No+Evidence+Attached',
+          accountStatus,
+          suspendDuration
+        };
+      });
+
+      if (currentSeq !== loadAdminSeq) return;
+      renderAll();
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      sidebar.classList.toggle('open');
+      backdrop.classList.toggle('hidden');
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`view-${tab}`).classList.remove('hidden');
+
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`nav-${tab}`).classList.add('active');
+
+      const titles = {
+        home: 'Overview',
+        reports: 'Passenger & Driver Reports',
+        verify: 'Driver Verification'
+      };
+      document.getElementById('page-title').textContent = titles[tab];
+
+      const sidebar = document.getElementById('sidebar');
+      if (sidebar.classList.contains('open')) {
+        toggleSidebar();
+      }
+    }
+
+    function renderAll() {
+      updateCounters();
+      renderHomePreviews();
+      renderReports();
+      renderVerifyDrivers();
+    }
+
+    function updateCounters() {
+      const pendingDriversCount = driversData.filter(d => d.verificationStatus === 'pending').length;
+      const openReportsCount = reportsData.filter(r => r.accountStatus === 'active').length;
+
+      document.getElementById('stat-total-users').textContent = liveStats.totalUsers.toLocaleString();
+      document.getElementById('stat-users-breakdown').textContent =
+        `${liveStats.passengerCount.toLocaleString()} Passengers • ${liveStats.driverCount.toLocaleString()} Drivers`;
+      document.getElementById('stat-active-trips').textContent = liveStats.activeTrips.toLocaleString();
+
+      document.getElementById('badge-verify').textContent = pendingDriversCount;
+      document.getElementById('stat-pending-drivers').textContent = pendingDriversCount;
+
+      document.getElementById('badge-reports').textContent = openReportsCount;
+      document.getElementById('stat-open-reports').textContent = openReportsCount;
+    }
+
+    function renderHomePreviews() {
+      const verifyBox = document.getElementById('home-verify-preview');
+      const pending = driversData.filter(d => d.verificationStatus === 'pending').slice(0, 3);
+      verifyBox.innerHTML = pending.length ? pending.map(d => `
+        <div class="preview-row">
+          <div class="row-left">
+            <div class="mini-avatar">${renderAvatarContent(d.photoUrl, d.avatar, d.fullname)}</div>
+            <div class="row-info">
+              <p class="row-title">${escapeHtml(d.fullname)}</p>
+              <p class="row-sub">Driver • Body: ${escapeHtml(d.bodyNo)} • Plate: ${escapeHtml(d.plateNo)}</p>
+            </div>
+          </div>
+          <span class="tag pending">Pending</span>
+        </div>
+      `).join('') : `<div style="padding: 20px; text-align: center; font-size: 12px; color: var(--muted);">No pending driver applications.</div>`;
+
+      const reportsBox = document.getElementById('home-reports-preview');
+      reportsBox.innerHTML = reportsData.length ? reportsData.slice(0, 3).map(r => `
+        <div class="preview-row">
+          <div class="row-info">
+            <p class="row-title">${escapeHtml(r.reason)}</p>
+            <p class="row-sub">Reported ${escapeHtml(r.reportedRole)}: <strong>${escapeHtml(r.reportedName)}</strong></p>
+          </div>
+          ${getAccountBadge(r.accountStatus, r.suspendDuration)}
+        </div>
+      `).join('') : `<div style="padding: 20px; text-align: center; font-size: 12px; color: var(--muted);">No reports found in Supabase.</div>`;
+    }
+
+    function getAccountBadge(status, duration = '') {
+      if (status === 'suspended') {
+        const label = duration ? `Suspended (${duration})` : 'Suspended';
+        return `<span class="tag suspended"><i class="fa-solid fa-pause-circle"></i>${escapeHtml(label)}</span>`;
+      }
+      if (status === 'banned') {
+        return `<span class="tag banned"><i class="fa-solid fa-ban"></i>Banned</span>`;
+      }
+      return `<span class="tag active"><i class="fa-solid fa-circle-check"></i>Active Account</span>`;
+    }
+
+    function renderReportActionButtons(report) {
+      const disabledAttr = isSubmittingAction ? 'disabled' : '';
+      const proofBtn = `
+        <button type="button" onclick="openModal('${escapeAttr(report.shortId)} Evidence', '${escapeAttr(report.evidenceUrl)}', 'Submitted by ${escapeAttr(report.reporterName)} regarding ${escapeAttr(report.reportedName)}')" class="act-btn act-outline" ${disabledAttr}>
+          <i class="fa-solid fa-image"></i> View Proof
+        </button>
+      `;
+
+      if (report.accountStatus === 'banned') {
+        return `
+          ${proofBtn}
+          <button type="button" onclick="setTargetAccountStatus('${escapeAttr(report.reportedUserId || '')}', 'active', '', '${escapeAttr(report.id)}')" class="act-btn act-green" ${disabledAttr}>
+            <i class="fa-solid fa-user-check"></i> Remove Ban
+          </button>
+        `;
+      }
+
+      if (report.accountStatus === 'suspended') {
+        return `
+          ${proofBtn}
+          <button type="button" onclick="setTargetAccountStatus('${escapeAttr(report.reportedUserId || '')}', 'active', '', '${escapeAttr(report.id)}')" class="act-btn act-green" ${disabledAttr}>
+            <i class="fa-solid fa-unlock"></i> Lift Suspension
+          </button>
+          <button type="button" onclick="setTargetAccountStatus('${escapeAttr(report.reportedUserId || '')}', 'banned', '', '${escapeAttr(report.id)}')" class="act-btn act-red" ${disabledAttr}>
+            <i class="fa-solid fa-ban"></i> Ban Permanently
+          </button>
+        `;
+      }
+
+      return `
+        ${proofBtn}
+        <button type="button" onclick="openSuspendModal('${escapeAttr(report.reportedUserId || '')}')" class="act-btn act-amber" ${disabledAttr}>
+          <i class="fa-solid fa-user-clock"></i> Suspend (1–7 Days)
+        </button>
+        <button type="button" onclick="setTargetAccountStatus('${escapeAttr(report.reportedUserId || '')}', 'banned', '', '${escapeAttr(report.id)}')" class="act-btn act-red" ${disabledAttr}>
+          <i class="fa-solid fa-ban"></i> Ban Permanently
+        </button>
+      `;
+    }
+
+    function filterReports(filter) {
+      currentReportFilter = filter;
+      document.querySelectorAll('.rep-filter-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`rep-filter-${filter}`).classList.add('active');
+      renderReports();
+    }
+
+    function renderReports() {
+      const container = document.getElementById('reports-list');
+      const filtered = reportsData.filter(r => currentReportFilter === 'all' || r.reportedRole === currentReportFilter);
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div style="background: var(--white); border: 1px solid var(--line); border-radius: 18px; padding: 32px; text-align: center; font-size: 13px; color: var(--muted);">No reports found in this category.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(r => `
+        <div class="report-card">
+          <div class="report-body">
+            <div class="report-meta-row">
+              <strong style="color: var(--muted);">${escapeHtml(r.shortId)}</strong>
+              <span class="tag role">Reported ${escapeHtml(r.reportedRole)}</span>
+              ${getAccountBadge(r.accountStatus, r.suspendDuration)}
+              <span style="color: var(--muted);">${escapeHtml(r.date)}</span>
+            </div>
+
+            <div>
+              <h4 style="font-size: 16px; font-weight: 800;">
+                ${escapeHtml(r.reportedName)}
+                <span style="font-size: 12px; font-weight: 500; color: var(--muted);">(Reported by ${escapeHtml(r.reporterName)})</span>
+              </h4>
+              <p style="font-size: 12px; font-weight: 700; color: var(--green); margin-top: 4px;">
+                <i class="fa-solid fa-location-dot"></i> ${escapeHtml(r.route)}
+              </p>
+            </div>
+
+            <div class="report-reason-box">
+              <b>Reason: ${escapeHtml(r.reason)}</b>
+              <p>${escapeHtml(r.details)}</p>
+            </div>
+          </div>
+
+          <div class="report-actions">
+            ${renderReportActionButtons(r)}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openSuspendModal(userId) {
+      if (!userId) {
+        showToast('Cannot suspend account: target user ID is missing.', 'red');
+        return;
+      }
+      const profile = profilesMap.get(userId);
+      const labelName = profile?.fullname || profile?.username || 'this user';
+      const labelRole = profile?.role ? normalizeRole(profile.role) : 'user';
+
+      pendingSuspendUserId = userId;
+      document.getElementById('suspend-target-name').textContent = `${labelName} (${labelRole})`;
+      document.getElementById('suspend-modal').classList.remove('hidden');
+    }
+
+    function closeSuspendModal() {
+      pendingSuspendUserId = null;
+      document.getElementById('suspend-modal').classList.add('hidden');
+    }
+
+    async function confirmSuspension() {
+      if (!pendingSuspendUserId) return;
+      const selectedRadio = document.querySelector('input[name="suspend-days"]:checked');
+      const duration = selectedRadio ? selectedRadio.value : '1 Day';
+      const targetUserId = pendingSuspendUserId;
+      closeSuspendModal();
+      await setTargetAccountStatus(targetUserId, 'suspended', duration);
+    }
+
+    async function setTargetAccountStatus(targetUserId, newStatus, duration = '', fallbackReportId = '') {
+      if (isSubmittingAction) return;
+      if (!targetUserId) {
+        showToast('Cannot update account: target user ID is missing.', 'red');
+        return;
+      }
+
+      isSubmittingAction = true;
+      renderReports();
+
+      try {
+        const suspendText = newStatus === 'suspended' ? duration : '';
+
+        const { data: profUpdated, error: profErr } = await _supabase
+          .from('profiles')
+          .update({
+            account_status: newStatus,
+            suspend_duration: suspendText
+          })
+          .eq('id', targetUserId)
+          .select('id, fullname, username, role, account_status, suspend_duration');
+
+        if (profErr) {
+          showToast(`Failed to update user account: ${profErr.message}`, 'red');
+          return;
+        }
+        if (!profUpdated || profUpdated.length === 0) {
+          showToast('No profile row updated (check Supabase RLS policy or reported_user_id).', 'red');
+          return;
+        }
+
+        const matchingReportIds = reportsData
+          .filter(r => r.reportedUserId === targetUserId)
+          .map(r => r.id)
+          .filter(Boolean);
+
+        if (fallbackReportId && !matchingReportIds.includes(fallbackReportId)) {
+          matchingReportIds.push(fallbackReportId);
+        }
+
+        if (matchingReportIds.length > 0) {
+          const { error: repErr } = await _supabase
+            .from('reports')
+            .update({ status: newStatus })
+            .in('id', matchingReportIds);
+
+          if (repErr) {
+            showToast(`Profile updated, but report status sync failed: ${repErr.message}`, 'amber');
+          }
+        }
+
+        await loadAdminData();
+
+        const updatedProfile = profUpdated[0];
+        const targetName = updatedProfile?.fullname || updatedProfile?.username || 'User';
+
+        if (newStatus === 'banned') {
+          showToast(`${targetName}'s account has been permanently BANNED.`, 'red');
+        } else if (newStatus === 'suspended') {
+          showToast(`${targetName}'s account has been SUSPENDED for ${duration}.`, 'amber');
+        } else {
+          showToast(`${targetName}'s account is ACTIVE again.`, 'green');
+        }
+      } finally {
+        isSubmittingAction = false;
+        renderReports();
+      }
+    }
+
+    function filterDrivers(filter) {
+      currentDriverFilter = filter;
+      document.querySelectorAll('.drv-filter-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`drv-filter-${filter}`).classList.add('active');
+      renderVerifyDrivers();
+    }
+
+    function renderVerifyDrivers() {
+      const container = document.getElementById('verify-list');
+      const filtered = driversData.filter(d => currentDriverFilter === 'all' || d.verificationStatus === currentDriverFilter);
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div style="grid-column: 1 / -1; background: var(--white); border: 1px solid var(--line); border-radius: 18px; padding: 32px; text-align: center; font-size: 13px; color: var(--muted);">No driver profiles in this category.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(d => {
+        const isApproved = d.verificationStatus === 'approved';
+        const isRejected = d.verificationStatus === 'rejected';
+
+        let verificationBadge = `<span class="tag pending"><i class="fa-solid fa-hourglass-half"></i>Pending Driver</span>`;
+        if (isApproved) verificationBadge = `<span class="tag active"><i class="fa-solid fa-circle-check"></i>Verified • Login Enabled</span>`;
+        if (isRejected) verificationBadge = `<span class="tag banned"><i class="fa-solid fa-circle-xmark"></i>Rejected</span>`;
+
+        return `
+        <div class="verify-card">
+          <div>
+            <div class="verify-head">
+              <div class="row-left">
+                <div class="mini-avatar driver-avatar">${renderAvatarContent(d.photoUrl, d.avatar, d.fullname)}</div>
+                <div class="row-info">
+                  <h4 style="font-size: 15px; font-weight: 800; line-height: 1.25;">${escapeHtml(d.fullname)}</h4>
+                  <p class="row-sub">Driver • ${escapeHtml(d.phone)} • Applied ${escapeHtml(d.appliedDate)}</p>
+                </div>
+              </div>
+              <div class="verify-badges">
+                ${verificationBadge}
+                ${d.accountStatus !== 'active' ? getAccountBadge(d.accountStatus, d.suspendDuration) : ''}
+              </div>
+            </div>
+
+            <div class="creds-grid">
+              <div class="cred-box"><span>Body Number</span><b>${escapeHtml(d.bodyNo)}</b></div>
+              <div class="cred-box"><span>Plate Number</span><b>${escapeHtml(d.plateNo)}</b></div>
+              <div class="cred-box"><span>Operator's Permit</span><b>${escapeHtml(d.permitNo)}</b></div>
+              <div class="cred-box"><span>Rehistro (OR/CR)</span><b>${escapeHtml(d.rehistroNo)}</b></div>
+            </div>
+
+            <div>
+              <span class="docs-label">Inspect Uploaded Documents</span>
+              <div class="docs-row">
+                <button type="button" onclick="openModal('Operator Permit (${escapeAttr(d.permitNo)})', '${escapeAttr(d.docs.permit)}', 'Driver: ${escapeAttr(d.fullname)} • Body No. ${escapeAttr(d.bodyNo)}')" class="doc-btn">
+                  <i class="fa-solid fa-file-contract"></i>
+                  <span>Permit</span>
+                </button>
+                <button type="button" onclick="openModal('LTO Rehistro (${escapeAttr(d.rehistroNo)})', '${escapeAttr(d.docs.rehistro)}', 'Plate No. ${escapeAttr(d.plateNo)} • Registered Owner Check')" class="doc-btn">
+                  <i class="fa-solid fa-id-card"></i>
+                  <span>OR / CR</span>
+                </button>
+                <button type="button" onclick="openModal('Tricycle Unit (${escapeAttr(d.bodyNo)})', '${escapeAttr(d.docs.tricycle)}', 'Sidecar & Body Number Verification')" class="doc-btn">
+                  <svg class="doc-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <circle cx="12" cy="12" r="2.5" />
+                    <line x1="12" y1="3" x2="12" y2="9.5" />
+                    <line x1="12" y1="14.5" x2="12" y2="21" />
+                    <line x1="4.2" y1="7.5" x2="9.8" y2="10.7" />
+                    <line x1="14.2" y1="13.3" x2="19.8" y2="16.5" />
+                    <line x1="19.8" y1="7.5" x2="14.2" y2="10.7" />
+                    <line x1="9.8" y1="13.3" x2="4.2" y2="16.5" />
+                  </svg>
+                  <span>Tricycle</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="verify-foot">
+            <button type="button" onclick="verifyDriver('${escapeAttr(d.id)}', 'approved')" ${isApproved ? 'disabled' : ''} class="act-btn act-green primary-verify">
+              <i class="fa-solid fa-check-double"></i>
+              <span>${isApproved ? 'Approved for App Login' : 'Verify & Enable Login'}</span>
+            </button>
+            ${!isRejected ? `
+              <button type="button" onclick="verifyDriver('${escapeAttr(d.id)}', 'rejected')" class="act-btn act-red secondary-verify">
+                Reject
+              </button>
+            ` : `
+              <button type="button" onclick="verifyDriver('${escapeAttr(d.id)}', 'pending')" class="act-btn act-outline secondary-verify">
+                Move to Pending
+              </button>
+            `}
+          </div>
+        </div>
+      `;
+      }).join('');
+    }
+
+    async function verifyDriver(driverId, status) {
+      const drv = driversData.find(d => String(d.id) === String(driverId));
+      if (!drv) return;
+
+      const { error } = await _supabase
+        .from('profiles')
+        .update({ verification_status: status })
+        .eq('id', driverId);
+
+      if (error) {
+        showToast(`Failed to update driver verification: ${error.message}`, 'red');
+        return;
+      }
+
+      await loadAdminData();
+      if (status === 'approved') {
+        showToast(`${drv.fullname} is now VERIFIED and can log in to the TriHatid Driver App!`, 'green');
+      } else if (status === 'rejected') {
+        showToast(`${drv.fullname}'s driver application was rejected.`, 'red');
+      } else {
+        showToast(`${drv.fullname}'s driver application was returned to Pending.`, 'amber');
+      }
+    }
+
+    function openModal(title, imgUrl, caption) {
+      document.getElementById('modal-doc-title').textContent = title;
+      document.getElementById('modal-doc-img').src = imgUrl;
+      document.getElementById('modal-doc-caption').textContent = caption;
+      document.getElementById('preview-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('preview-modal').classList.add('hidden');
+    }
+
+    function showToast(message, color = 'green') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast-item ${color}`;
+      toast.innerHTML = `<i class="fa-solid fa-circle-info"></i><span>${escapeHtml(message)}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 250);
+      }, 3500);
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function escapeAttr(str) {
+      return String(str ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/\n/g, ' ');
+    }
+  </script>
+</body>
+</html>
